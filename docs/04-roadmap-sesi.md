@@ -11,13 +11,13 @@ hijau → commit → push → tandai sesi selesai di tabel bawah.
 | 0 | Fondasi dokumen, skema DB, design system | ✅ selesai |
 | 1 | Scaffold, design system, layout responsif, autentikasi + verifikasi admin | ✅ selesai |
 | 2 | Kelola pengguna (verifikasi, tambah, edit, hapus) + pengaturan shift | ✅ selesai |
-| 3 | Absensi (clock in/out, selfie, GPS, riwayat) | ⬜ |
-| 4 | Jadwal & kalender (host + admin, publish) | ⬜ |
-| 5 | Generator jadwal otomatis + review draft | ⬜ |
-| 6 | Pengajuan izin & libur, approval, audit log | ⬜ |
-| 7 | Laporan omzet + export PDF/Excel + chart | ⬜ |
-| 8 | PWA, push notification, cron reminder, dashboard admin | ⬜ |
-| 9 | Poles desktop, responsif, dan QA menyeluruh | ⬜ |
+| 3 | Absensi (clock in/out, selfie, GPS, riwayat) | ✅ selesai |
+| 4 | Jadwal & kalender (host + admin, publish) | ✅ selesai |
+| 5 | Generator jadwal otomatis + review draft | ✅ selesai |
+| 6 | Pengajuan izin & libur, approval, audit log | ✅ selesai |
+| 7 | Laporan omzet + export PDF/Excel + chart | ✅ selesai |
+| 8 | PWA, push notification, cron reminder, dashboard admin | ✅ selesai |
+| 9 | Poles desktop, responsif, dan QA menyeluruh | ✅ selesai |
 
 ---
 
@@ -56,7 +56,7 @@ sesudah disetujui pengguna otomatis masuk ke beranda. Build hijau, nav benar di 
 **Selesai bila:** admin bisa memverifikasi pendaftar, membuat akun host baru yang langsung bisa
 login, mengedit dan menonaktifkannya, serta mengelola shift sepenuhnya.
 
-## Sesi 3 — Absensi
+## Sesi 3 — Absensi ✅
 
 **Lingkup**
 - Migrasi `0003`: `attendances` + RLS.
@@ -73,7 +73,7 @@ login, mengedit dan menonaktifkannya, serta mengelola shift sepenuhnya.
 **Selesai bila:** siklus clock in → clock out lengkap dengan foto, lokasi, dan status yang benar,
 terlihat di riwayat host maupun monitor admin.
 
-## Sesi 4 — Jadwal & kalender
+## Sesi 4 — Jadwal & kalender ✅
 
 **Lingkup**
 - Migrasi `0004`: `schedule_periods`, `schedule_assignments` + RLS (host hanya melihat `published`).
@@ -88,7 +88,7 @@ terlihat di riwayat host maupun monitor admin.
 **Selesai bila:** admin bisa menyusun dan mem-publish jadwal secara manual, dan host melihatnya
 di ketiga tampilan kalender.
 
-## Sesi 5 — Generator jadwal otomatis
+## Sesi 5 — Generator jadwal otomatis ✅
 
 **Lingkup**
 - `lib/scheduling/` — mesin rule-based murni, tanpa efek samping, mudah diuji:
@@ -106,7 +106,7 @@ di ketiga tampilan kalender.
 **Selesai bila:** admin bisa membuat draft satu bulan penuh dalam sekali klik, mengeditnya,
 dan mem-publish-nya, dengan seluruh batasan keras terpenuhi dan test hijau.
 
-## Sesi 6 — Pengajuan izin & libur + audit log
+## Sesi 6 — Pengajuan izin & libur + audit log ✅
 
 **Lingkup**
 - Migrasi `0005` (`leave_requests`) dan bagian audit dari `0007` (`audit_logs`).
@@ -121,7 +121,7 @@ dan mem-publish-nya, dengan seluruh batasan keras terpenuhi dan test hijau.
 **Selesai bila:** siklus ajukan → approve/reject → tercermin di generator jadwal berjalan penuh,
 dan tiap aksi berdampak tercatat di audit log.
 
-## Sesi 7 — Omzet, laporan & export
+## Sesi 7 — Omzet, laporan & export ✅
 
 **Lingkup**
 - Migrasi `0006`: `revenue_reports` + RLS.
@@ -133,7 +133,7 @@ dan tiap aksi berdampak tercatat di audit log.
 
 **Selesai bila:** kedua laporan bisa di-export dalam dua format dengan isi yang sesuai filter.
 
-## Sesi 8 — PWA, notifikasi & dashboard admin
+## Sesi 8 — PWA, notifikasi & dashboard admin ✅
 
 **Lingkup**
 - Manifest PWA + service worker + ikon; panduan install ke home screen (khusus iOS dijelaskan berbeda).
@@ -151,7 +151,7 @@ dan tiap aksi berdampak tercatat di audit log.
 **Selesai bila:** aplikasi bisa di-install, notifikasi reminder benar-benar sampai di perangkat Android,
 dan dashboard menampilkan data nyata.
 
-## Sesi 9 — Poles & QA
+## Sesi 9 — Poles & QA ✅
 
 **Lingkup**
 - Telusuri setiap halaman di 360px, 768px, dan 1440px; perbaiki yang meleset dari design system.
@@ -165,10 +165,13 @@ dan dashboard menampilkan data nyata.
 
 ---
 
-## Cara memulai sesi berikutnya
+## Setelah roadmap ini
 
-Cukup tulis, misalnya:
+Seluruh sesi sudah selesai. Pekerjaan lanjutan yang masuk akal berikutnya:
 
-> Lanjut Sesi 3 sesuai `docs/04-roadmap-sesi.md`.
+- Integrasi payroll (nomor rekening dan total jam kerja sudah tersedia di data).
+- Kebijakan penyimpanan foto absensi bila kuota Storage mulai menipis.
+- Notifikasi ringkasan harian untuk admin.
 
-Sesi tersebut akan membaca dokumen fondasi, mengerjakan lingkupnya, lalu commit dan push.
+Catat kebutuhan baru di `docs/99-open-questions.md` sebelum mulai membangun,
+supaya keputusannya tetap terlacak seperti sesi-sesi sebelumnya.

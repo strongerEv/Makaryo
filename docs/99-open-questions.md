@@ -5,12 +5,14 @@ karenanya — pilih asumsi paling wajar, tulis asumsinya, dan lanjutkan.
 
 | # | Pertanyaan | Asumsi sementara | Perlu diputuskan sebelum |
 |---|---|---|---|
-| 1 | Host lupa clock out — bagaimana perlakuannya? | Sistem menutup otomatis di jam berakhirnya shift dan menandai "clock out otomatis"; admin bisa mengoreksi manual (tercatat di audit log). | Sesi 3 |
-| 2 | Host lupa clock in tapi terbukti kerja | Admin bisa membuat absensi manual untuk host, tercatat di audit log sebagai entri admin. | Sesi 3 |
-| 3 | Penamaan shift custom | Bebas diisi admin, ditambah urutan tampil. Tanpa skema penomoran otomatis. | Sesi 2 |
+| 1 | ~~Host lupa clock out~~ **Diputuskan** | Cron harian menutup otomatis di jam berakhirnya shift (jeda 2 jam), ditandai "ditutup otomatis", dan admin bisa mengoreksi lewat dialog Koreksi. | Selesai di Sesi 8 |
+| 2 | ~~Host lupa clock in tapi terbukti kerja~~ **Diputuskan** | Admin memakai tombol "Catat manual" di halaman Absensi; entri tercatat di audit log. | Selesai di Sesi 3 |
+| 3 | ~~Penamaan shift custom~~ **Diputuskan** | Nama bebas diisi admin, plus urutan tampil dan warna. Tanpa penomoran otomatis. | Selesai di Sesi 2 |
 | 4 | Integrasi payroll | Belum ada. Nomor rekening dan total jam kerja sudah disiapkan agar mudah ditambahkan nanti. | — |
 | 5 | Berapa lama foto absensi disimpan? | Disimpan tanpa batas waktu untuk sekarang. Kalau kuota storage jadi masalah, tambahkan kebijakan hapus otomatis (mis. 6 bulan). | Sesi 9 |
-| 6 | Apakah host boleh melihat omzet host lain? | Tidak. Host hanya melihat omzet miliknya sendiri. | Sesi 7 |
-| 7 | Shift yang melewati tengah malam | Didukung skema (`end_time <= start_time` berarti selesai keesokan hari), tapi di luar rentang operasional 06.00–21.00 saat ini. | Sesi 4 |
+| 6 | ~~Host melihat omzet host lain?~~ **Diputuskan** | Tidak. RLS membatasi host hanya pada omzet miliknya sendiri. | Selesai di Sesi 7 |
+| 7 | ~~Shift melewati tengah malam~~ **Diputuskan** | Didukung penuh: `end_time <= start_time` berarti selesai keesokan hari, dipakai konsisten oleh absensi, penjadwalan, dan cron. | Selesai di Sesi 5 |
 | 8 | Apakah pendaftaran mandiri perlu dibatasi (mis. hanya email domain tertentu)? | Terbuka untuk siapa saja, tetapi tidak ada akses sebelum admin menyetujui. | Sesi 9 |
 | 9 | Admin pertama dibuat bagaimana? | Lewat SQL sekali di Supabase (lihat README). Sesudah itu admin bisa dibuat dari halaman Kelola Pengguna. | — |
+| 10 | Suara alarm khusus untuk pengingat shift | Web Push memakai suara notifikasi bawaan sistem — tidak bisa diganti dari web. Yang bisa dikendalikan hanya pola getar (dipakai pola panjang khusus reminder) dan `requireInteraction` agar notifikasi tidak hilang sendiri. | — |
+| 11 | Retensi data notifikasi & audit log | Belum ada pembersihan otomatis. Tambahkan bila tabelnya sudah membengkak. | Saat volume data naik |

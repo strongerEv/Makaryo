@@ -75,10 +75,13 @@ Satu periode penjadwalan (minggu atau bulan) yang di-generate lalu dipublish.
 | id | uuid PK | |
 | start_date, end_date | date | |
 | status | text | `draft` \| `published` |
+| warnings | jsonb | daftar shift yang kurang personel saat generate |
 | generated_at | timestamptz | kapan draft dibuat |
 | published_at | timestamptz | |
 | published_by | uuid FK profiles | |
 | created_at | timestamptz | |
+
+Unik: `(start_date, end_date)` — satu periode per rentang, sehingga generate ulang menimpa draft lama.
 
 ### schedule_assignments
 Satu baris = satu host di satu shift di satu tanggal.
@@ -113,6 +116,9 @@ Satu baris per host per hari kerja; clock in dan clock out di baris yang sama.
 | clock_out_photo | text | |
 | clock_out_lat, clock_out_lng | numeric | |
 | status | text | `on_time` \| `late` \| `absent` |
+| auto_closed | boolean | true bila clock out diisi otomatis oleh cron |
+| note | text | catatan manual/koreksi admin |
+| recorded_by | uuid FK profiles | siapa yang mencatat (host sendiri atau admin) |
 | late_minutes | int | 0 bila tepat waktu |
 | worked_minutes | int | dihitung saat clock out |
 | created_at, updated_at | timestamptz | |

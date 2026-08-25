@@ -9,6 +9,8 @@ import { requireHost } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { signAvatarUrl } from "@/lib/storage/avatar";
 import { formatDate } from "@/lib/utils/datetime";
+import { InstallGuide } from "@/components/pwa/install-guide";
+import { NotificationSettings } from "@/components/pwa/notification-settings";
 import { ChangePasswordForm } from "./change-password-form";
 import { ProfileForm } from "./profile-form";
 
@@ -56,6 +58,19 @@ export default async function ProfilePage() {
                 <dd className="font-semibold text-ink">{profile.bank_account ?? "—"}</dd>
               </div>
             </dl>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Notifikasi"
+              description="Pengingat jam kerja, hasil approval, dan jadwal baru."
+            />
+            <NotificationSettings vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
+          </Card>
+
+          <Card>
+            <CardHeader title="Pasang aplikasi" description="Agar notifikasi berjalan optimal." />
+            <InstallGuide />
           </Card>
 
           <Card>

@@ -58,5 +58,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|gif|ico|css|js)$).*)"],
+  // Route cron dikecualikan: pemanggilnya adalah Vercel Cron tanpa sesi pengguna,
+  // dan route itu sudah dilindungi CRON_SECRET sendiri.
+  matcher: [
+    "/((?!api/cron|_next/static|_next/image|favicon.ico|icons|manifest.webmanifest|sw.js|.*\\.(?:svg|png|jpg|jpeg|webp|gif|ico|css|js)$).*)",
+  ],
 };

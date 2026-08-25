@@ -55,10 +55,16 @@ components/
   ui/            — primitif: Button, Card, Input, Sheet, dst
   layout/        — AppShell, BottomNav, Sidebar, PageHeader
 lib/
-  supabase/      — client browser & server
-  scheduling/    — mesin penjadwalan rule-based
-  push/          — helper web push
-  utils/
+  supabase/      — client browser, server, dan service role
+  auth/          — sesi, penjaga peran, audit log
+  attendance/    — perhitungan status, jam shift, statistik
+  scheduling/    — mesin penjadwalan rule-based (murni, ada unit test)
+  notifications/ — notifikasi dalam aplikasi + push
+  push/          — helper web push (VAPID)
+  export/        — query, workbook Excel, dokumen PDF
+  storage/       — unggah & signed URL untuk foto
+  cron/          — penjaga akses route cron
+  utils/         — waktu WIB, periode, format
 supabase/
   migrations/    — file SQL bernomor urut
 docs/
@@ -71,6 +77,7 @@ npm run dev        # server pengembangan
 npm run build      # wajib hijau sebelum commit
 npm run lint
 npm run typecheck
+npm run test       # unit test mesin penjadwalan & perhitungan absensi
 ```
 
 ## Peran & hak akses

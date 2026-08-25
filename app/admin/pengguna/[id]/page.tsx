@@ -9,11 +9,14 @@ import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
 import { Card, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
+import { formatDuration } from "@/lib/attendance/status";
+import { getMonthlyAttendanceStats, getMonthlyRevenueTotal } from "@/lib/attendance/stats";
 import { requireAdmin } from "@/lib/auth/session";
 import { signAvatarUrl } from "@/lib/storage/avatar";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types/database";
 import { ROLE_LABEL } from "@/lib/types/database";
+import { formatCurrency } from "@/lib/utils/format";
 import { formatDate, formatDateTime } from "@/lib/utils/datetime";
 import { DangerZone } from "./danger-zone";
 import { EditUserForm } from "./edit-user-form";
@@ -29,7 +32,11 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   if (!data) notFound();
 
   const user = data as Profile;
-  const avatarUrl = await signAvatarUrl(supabase, user.avatar_url);
+  const [avatarUrl, stats, revenueTotal] = await Promise.all([
+    signAvatarUrl(supabase, user.avatar_url),
+    getMonthlyAttendanceStats(supabase, user.id),
+    getMonthlyRevenueTotal(supabase, user.id),
+  ]);
   const isSelf = user.id === admin.id;
 
   return (
@@ -63,10 +70,21 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       ) : null}
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Jam kerja bulan ini" value="0 jam" icon={Clock3} tone="primary" hint="Terisi setelah modul absensi" />
-        <StatCard label="Tepat waktu" value="0" icon={CalendarCheck} tone="emerald" hint="Terisi setelah modul absensi" />
-        <StatCard label="Telat" value="0" icon={Clock3} tone="amber" hint="Terisi setelah modul absensi" />
-        <StatCard label="Omzet bulan ini" value="Rp0" icon={Wallet} tone="sky" hint="Terisi setelah modul omzet" />
+        <StatCard
+          label="Jam kerja bulan ini"
+          value={formatDuration(stats.totalMinutes)}
+          icon={Clock3}
+          tone="primary"
+        />
+        <StatCard label="Tepat waktu" value={stats.onTime} icon={CalendarCheck} tone="emerald" />
+        <StatCard
+          label="Telat"
+          value={stats.late}
+          icon={Clock3}
+          tone="amber"
+          hint={stats.absent > 0 ? `${stats.absent}x tidak absen` : undefined}
+        />
+        <StatCard label="Omzet bulan ini" value={formatCurrency(revenueTotal)} icon={Wallet} tone="sky" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
