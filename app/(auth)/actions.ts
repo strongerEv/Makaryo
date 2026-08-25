@@ -40,6 +40,16 @@ function translateAuthError(message: string): string {
   if (normalized.includes("rate limit") || normalized.includes("too many")) {
     return "Terlalu banyak percobaan. Coba lagi beberapa saat lagi.";
   }
+  // Pendaftaran mandiri dimatikan di pengaturan Supabase — pesan aslinya berbahasa
+  // Inggris dan tidak memberi tahu pendaftar apa yang harus dilakukan.
+  if (
+    normalized.includes("signups not allowed") ||
+    normalized.includes("signup is disabled") ||
+    normalized.includes("signups are disabled") ||
+    normalized.includes("email signups are disabled")
+  ) {
+    return "Pendaftaran mandiri sedang ditutup. Hubungi admin untuk dibuatkan akun.";
+  }
   if (normalized.includes("password should be at least")) return "Kata sandi minimal 8 karakter.";
   if (normalized.includes("new password should be different")) {
     return "Kata sandi baru harus berbeda dari kata sandi lama.";
