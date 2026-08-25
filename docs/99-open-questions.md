@@ -16,3 +16,4 @@ karenanya — pilih asumsi paling wajar, tulis asumsinya, dan lanjutkan.
 | 9 | Admin pertama dibuat bagaimana? | Lewat SQL sekali di Supabase (lihat README). Sesudah itu admin bisa dibuat dari halaman Kelola Pengguna. | — |
 | 10 | Suara alarm khusus untuk pengingat shift | Web Push memakai suara notifikasi bawaan sistem — tidak bisa diganti dari web. Yang bisa dikendalikan hanya pola getar (dipakai pola panjang khusus reminder) dan `requireInteraction` agar notifikasi tidak hilang sendiri. | — |
 | 11 | Retensi data notifikasi & audit log | Belum ada pembersihan otomatis. Tambahkan bila tabelnya sudah membengkak. | Saat volume data naik |
+| 12 | Penjadwal pengingat tiap 5 menit | Paket gratis Vercel hanya mengizinkan cron sekali sehari, jadi pemicu pengingat dipindahkan ke pg_cron milik Supabase. Bisa dikembalikan ke Vercel bila nanti berlangganan Pro. | Selesai — lihat `docs/06-pengingat-shift.md` |

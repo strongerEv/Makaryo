@@ -87,12 +87,14 @@ Buka http://localhost:3000.
 ## Deploy ke Vercel
 
 1. Hubungkan repositori ini ke Vercel, isi seluruh environment variable di atas.
-2. `vercel.json` sudah mendaftarkan dua cron:
-   - `/api/cron/reminders` tiap 5 menit — pengingat H-1 jam, H-30 menit, H-15 menit
-   - `/api/cron/daily` pukul 16.00 UTC (23.00 WIB) — menutup absensi yang lupa clock out
-     dan menandai host yang tidak absen
-3. Set `CRON_SECRET` di Vercel; kedua route menolak permintaan tanpa token tersebut.
-4. Tambahkan URL produksi ke Supabase → Authentication → URL Configuration agar tautan
+2. `vercel.json` mendaftarkan satu cron harian: `/api/cron/daily` pukul 16.00 UTC
+   (23.00 WIB) — menutup absensi yang lupa clock out dan menandai host yang tidak absen.
+3. Pengingat jam kerja perlu dicek tiap 5 menit, sedangkan paket gratis Vercel hanya
+   mengizinkan cron sekali sehari. Pasang pemicunya di Supabase dengan menjalankan
+   `supabase/pengingat-cron.sql` — langkah lengkapnya di
+   [`docs/06-pengingat-shift.md`](docs/06-pengingat-shift.md).
+4. Set `CRON_SECRET` di Vercel; kedua route menolak permintaan tanpa token tersebut.
+5. Tambahkan URL produksi ke Supabase → Authentication → URL Configuration agar tautan
    reset kata sandi mengarah ke domain yang benar.
 
 ## Perintah
@@ -124,6 +126,7 @@ npm run test       # unit test mesin penjadwalan & perhitungan absensi
 | [`docs/02-database.md`](docs/02-database.md) | Skema tabel, relasi, dan aturan RLS |
 | [`docs/03-design-system.md`](docs/03-design-system.md) | Token warna, tipografi, komponen, aturan responsif |
 | [`docs/04-roadmap-sesi.md`](docs/04-roadmap-sesi.md) | Pembagian pekerjaan menjadi 10 sesi |
+| [`docs/06-pengingat-shift.md`](docs/06-pengingat-shift.md) | Penjadwal pengingat jam kerja di luar Vercel |
 | [`docs/99-open-questions.md`](docs/99-open-questions.md) | Keputusan yang tertunda dan asumsinya |
 
 Referensi visual: [`docs/assets/design-reference.jpg`](docs/assets/design-reference.jpg).

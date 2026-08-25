@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { shiftStartInstant } from "@/lib/attendance/time";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { notifyUsers } from "@/lib/notifications/notify";
+import { crossedReminderStages, reminderLabel } from "@/lib/notifications/reminder";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Shift } from "@/lib/types/database";
 import { formatClock, todayInJakarta } from "@/lib/utils/datetime";
@@ -11,12 +12,15 @@ import { addDays } from "@/lib/utils/period";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Pengingat dikirim pada H-1 jam, H-30 menit, dan H-15 menit. */
-const OFFSETS = [60, 30, 15];
-
-/** Cron berjalan tiap 5 menit, jadi tiap offset punya jendela 5 menit. */
-const WINDOW_MINUTES = 5;
-
+/**
+ * Mengirim pengingat jam kerja.
+ *
+ * Route ini sengaja tidak mengasumsikan jeda pemanggilan tertentu: ia mencatat
+ * setiap tahap yang sudah terlampaui, lalu mengirim paling banyak satu notifikasi
+ * per penugasan dengan sisa waktu yang sebenarnya. Jadi pemanggilnya boleh tiap
+ * 5 menit, tiap 10 menit, atau telat sekalipun — pengingat tidak hilang dan
+ * tidak pernah terkirim dua kali.
+ */
 export async function GET(request: NextRequest) {
   if (!isAuthorizedCron(request)) {
     return NextResponse.json({ error: "Tidak diizinkan." }, { status: 401 });
@@ -42,19 +46,25 @@ export async function GET(request: NextRequest) {
     const startsAt = shiftStartInstant(assignment.work_date as string, shift.start_time).getTime();
     const minutesUntil = (startsAt - now) / 60_000;
 
-    const offset = OFFSETS.find(
-      (value) => minutesUntil <= value && minutesUntil > value - WINDOW_MINUTES,
-    );
-    if (!offset) continue;
+    // Kosong berarti shift sudah dimulai atau masih terlalu jauh untuk diingatkan.
+    const crossed = crossedReminderStages(minutesUntil);
+    if (crossed.length === 0) continue;
 
-    // Penanda pengiriman menjaga agar satu pengingat tidak terkirim dua kali.
-    const { error } = await admin
-      .from("notification_deliveries")
-      .insert({ assignment_id: assignment.id as string, offset_minutes: offset });
+    let hasNewStage = false;
 
-    if (error) continue;
+    for (const offset of crossed) {
+      // Penanda pengiriman bersifat unik, jadi tahap yang sudah pernah
+      // terkirim akan gagal disisipkan dan otomatis dilewati.
+      const { error } = await admin
+        .from("notification_deliveries")
+        .insert({ assignment_id: assignment.id as string, offset_minutes: offset });
 
-    const label = offset >= 60 ? "1 jam lagi" : `${offset} menit lagi`;
+      if (!error) hasNewStage = true;
+    }
+
+    if (!hasNewStage) continue;
+
+    const label = reminderLabel(minutesUntil);
 
     await notifyUsers({
       userIds: [assignment.host_id as string],
