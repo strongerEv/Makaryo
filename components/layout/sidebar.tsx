@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { Brand } from "@/components/layout/brand";
 import type { NavItem } from "@/components/layout/nav";
+import { NAV_ICONS } from "@/components/layout/nav-icons";
 import { cn } from "@/lib/utils/cn";
 
 export function isActivePath(pathname: string, href: string) {
@@ -16,7 +17,8 @@ export function SidebarNav({ items, onNavigate }: { items: NavItem[]; onNavigate
 
   return (
     <nav className="flex flex-col gap-1" aria-label="Navigasi utama">
-      {items.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon }) => {
+        const Icon = NAV_ICONS[icon];
         const active = isActivePath(pathname, href);
         return (
           <Link

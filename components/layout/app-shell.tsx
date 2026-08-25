@@ -30,14 +30,20 @@ export async function AppShell({
   profileHref: string;
   children: ReactNode;
 }) {
-  const supabase = await createClient();
-  const { count } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", profile.id)
-    .is("read_at", null);
-
-  const unread = count ?? 0;
+  // Jumlah notifikasi belum dibaca tidak boleh menjatuhkan seluruh halaman
+  // bila database sedang tidak terjangkau.
+  let unread = 0;
+  try {
+    const supabase = await createClient();
+    const { count } = await supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .is("read_at", null);
+    unread = count ?? 0;
+  } catch (error) {
+    console.error("Gagal membaca jumlah notifikasi", error);
+  }
 
   const userMenu = (
     <UserMenu
