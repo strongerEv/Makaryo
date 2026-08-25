@@ -3,10 +3,12 @@
 --
 -- Gabungan seluruh berkas di supabase/migrations/ dalam urutan yang benar.
 -- Salin SELURUH isi berkas ini, tempel ke Supabase SQL Editor, lalu klik Run.
--- Cukup dijalankan SATU KALI pada proyek Supabase yang masih kosong.
 --
--- Berkas ini dihasilkan dari migrasi; bila ada migrasi baru, jalankan
--- berkas migrasi itu saja, jangan menjalankan ulang berkas ini.
+-- Berkas ini AMAN dijalankan berulang kali: bagian yang sudah ada dilewati,
+-- bagian yang belum ada dibuatkan. Jadi bila sebelumnya gagal di tengah jalan,
+-- cukup jalankan ulang berkas ini.
+--
+-- Dihasilkan oleh scripts/build-setup-sql.mjs — jangan diubah manual.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -19,13 +21,24 @@ create extension if not exists "pgcrypto";
 
 -- ---------------------------------------------------------------- enum
 
-create type user_role as enum ('admin', 'host');
-create type account_status as enum ('pending', 'active', 'rejected', 'suspended');
-create type employment_status as enum ('active', 'inactive', 'long_leave');
+do $guard$ begin
+  create type user_role as enum ('admin', 'host');
+exception when duplicate_object then null;
+end $guard$;
+
+do $guard$ begin
+  create type account_status as enum ('pending', 'active', 'rejected', 'suspended');
+exception when duplicate_object then null;
+end $guard$;
+
+do $guard$ begin
+  create type employment_status as enum ('active', 'inactive', 'long_leave');
+exception when duplicate_object then null;
+end $guard$;
 
 -- ---------------------------------------------------------------- profiles
 
-create table public.profiles (
+create table if not exists public.profiles (
   id                   uuid primary key references auth.users (id) on delete cascade,
   role                 user_role         not null default 'host',
   account_status       account_status    not null default 'pending',
@@ -50,13 +63,15 @@ create table public.profiles (
   updated_at           timestamptz       not null default now()
 );
 
-create index profiles_role_idx on public.profiles (role);
-create index profiles_account_status_idx on public.profiles (account_status);
-create index profiles_employment_status_idx on public.profiles (employment_status);
+create index if not exists profiles_role_idx on public.profiles (role);
+
+create index if not exists profiles_account_status_idx on public.profiles (account_status);
+
+create index if not exists profiles_employment_status_idx on public.profiles (employment_status);
 
 -- ---------------------------------------------------------------- audit log
 
-create table public.audit_logs (
+create table if not exists public.audit_logs (
   id             uuid primary key default gen_random_uuid(),
   actor_id       uuid references public.profiles (id) on delete set null,
   entity         text not null,
@@ -68,8 +83,9 @@ create table public.audit_logs (
   created_at     timestamptz not null default now()
 );
 
-create index audit_logs_created_at_idx on public.audit_logs (created_at desc);
-create index audit_logs_entity_idx on public.audit_logs (entity, entity_id);
+create index if not exists audit_logs_created_at_idx on public.audit_logs (created_at desc);
+
+create index if not exists audit_logs_entity_idx on public.audit_logs (entity, entity_id);
 
 -- ---------------------------------------------------------------- helper
 
@@ -113,6 +129,8 @@ begin
 end;
 $$;
 
+drop trigger if exists profiles_set_updated_at on public.profiles;
+
 create trigger profiles_set_updated_at
   before update on public.profiles
   for each row execute function public.set_updated_at();
@@ -141,6 +159,8 @@ begin
   return new;
 end;
 $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
 
 create trigger on_auth_user_created
   after insert on auth.users
@@ -176,6 +196,8 @@ begin
 end;
 $$;
 
+drop trigger if exists profiles_guard_privileged_columns on public.profiles;
+
 create trigger profiles_guard_privileged_columns
   before update on public.profiles
   for each row execute function public.profiles_guard_privileged_columns();
@@ -183,29 +205,42 @@ create trigger profiles_guard_privileged_columns
 -- ---------------------------------------------------------------- RLS
 
 alter table public.profiles   enable row level security;
+
 alter table public.audit_logs enable row level security;
+
+drop policy if exists "profil sendiri dapat dibaca" on public.profiles;
 
 create policy "profil sendiri dapat dibaca"
   on public.profiles for select
   using (id = auth.uid());
 
+drop policy if exists "admin membaca semua profil" on public.profiles;
+
 create policy "admin membaca semua profil"
   on public.profiles for select
   using (public.is_admin());
+
+drop policy if exists "profil sendiri dapat diubah" on public.profiles;
 
 create policy "profil sendiri dapat diubah"
   on public.profiles for update
   using (id = auth.uid())
   with check (id = auth.uid());
 
+drop policy if exists "admin mengubah semua profil" on public.profiles;
+
 create policy "admin mengubah semua profil"
   on public.profiles for update
   using (public.is_admin())
   with check (public.is_admin());
 
+drop policy if exists "admin menghapus profil" on public.profiles;
+
 create policy "admin menghapus profil"
   on public.profiles for delete
   using (public.is_admin() and id <> auth.uid());
+
+drop policy if exists "admin membaca audit log" on public.audit_logs;
 
 create policy "admin membaca audit log"
   on public.audit_logs for select
@@ -220,12 +255,16 @@ insert into storage.buckets (id, name, public)
 values ('avatars', 'avatars', false)
 on conflict (id) do nothing;
 
+drop policy if exists "avatar dapat dibaca pemilik dan admin" on storage.objects;
+
 create policy "avatar dapat dibaca pemilik dan admin"
   on storage.objects for select
   using (
     bucket_id = 'avatars'
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
+
+drop policy if exists "avatar diunggah pemilik atau admin" on storage.objects;
 
 create policy "avatar diunggah pemilik atau admin"
   on storage.objects for insert
@@ -234,12 +273,16 @@ create policy "avatar diunggah pemilik atau admin"
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
 
+drop policy if exists "avatar diperbarui pemilik atau admin" on storage.objects;
+
 create policy "avatar diperbarui pemilik atau admin"
   on storage.objects for update
   using (
     bucket_id = 'avatars'
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
+
+drop policy if exists "avatar dihapus pemilik atau admin" on storage.objects;
 
 create policy "avatar dihapus pemilik atau admin"
   on storage.objects for delete
@@ -254,7 +297,7 @@ create policy "avatar dihapus pemilik atau admin"
 
 -- Makaryo — 0002: master shift dan pengaturan aplikasi.
 
-create table public.shifts (
+create table if not exists public.shifts (
   id          uuid primary key default gen_random_uuid(),
   name        text     not null,
   start_time  time     not null,
@@ -267,14 +310,16 @@ create table public.shifts (
   updated_at  timestamptz not null default now()
 );
 
-create index shifts_active_idx on public.shifts (is_active, sort_order);
+create index if not exists shifts_active_idx on public.shifts (is_active, sort_order);
+
+drop trigger if exists shifts_set_updated_at on public.shifts;
 
 create trigger shifts_set_updated_at
   before update on public.shifts
   for each row execute function public.set_updated_at();
 
 -- Satu baris berisi pengaturan global. Dikunci pada id = 1.
-create table public.app_settings (
+create table if not exists public.app_settings (
   id                        smallint primary key default 1 check (id = 1),
   weekly_off_request_open   boolean     not null default false,
   weekly_off_request_period date,
@@ -284,6 +329,8 @@ create table public.app_settings (
   updated_at                timestamptz not null default now()
 );
 
+drop trigger if exists app_settings_set_updated_at on public.app_settings;
+
 create trigger app_settings_set_updated_at
   before update on public.app_settings
   for each row execute function public.set_updated_at();
@@ -291,20 +338,29 @@ create trigger app_settings_set_updated_at
 -- ---------------------------------------------------------------- RLS
 
 alter table public.shifts       enable row level security;
+
 alter table public.app_settings enable row level security;
+
+drop policy if exists "shift dibaca pengguna aktif" on public.shifts;
 
 create policy "shift dibaca pengguna aktif"
   on public.shifts for select
   using (public.is_active_user());
+
+drop policy if exists "admin mengelola shift" on public.shifts;
 
 create policy "admin mengelola shift"
   on public.shifts for all
   using (public.is_admin())
   with check (public.is_admin());
 
+drop policy if exists "pengaturan dibaca pengguna aktif" on public.app_settings;
+
 create policy "pengaturan dibaca pengguna aktif"
   on public.app_settings for select
   using (public.is_active_user());
+
+drop policy if exists "admin mengubah pengaturan" on public.app_settings;
 
 create policy "admin mengubah pengaturan"
   on public.app_settings for update
@@ -316,12 +372,15 @@ create policy "admin mengubah pengaturan"
 insert into public.app_settings (id) values (1) on conflict (id) do nothing;
 
 -- Tiga shift bawaan dalam rentang operasional 06.00–21.00. Jamnya boleh diubah admin.
+-- Hanya diisi saat tabel masih kosong, agar migrasi aman dijalankan ulang.
 insert into public.shifts (name, start_time, end_time, min_hosts, color, sort_order)
-values
-  ('Shift Pagi',  '06:00', '11:00', 1, 'amber',   1),
-  ('Shift Siang', '11:00', '16:00', 1, 'primary', 2),
-  ('Shift Sore',  '16:00', '21:00', 1, 'coral',   3)
-on conflict do nothing;
+select *
+from (values
+  ('Shift Pagi',  time '06:00', time '11:00', 1, 'amber',   1),
+  ('Shift Siang', time '11:00', time '16:00', 1, 'primary', 2),
+  ('Shift Sore',  time '16:00', time '21:00', 1, 'coral',   3)
+) as seed(name, start_time, end_time, min_hosts, color, sort_order)
+where not exists (select 1 from public.shifts);
 
 -- ---------------------------------------------------------------------
 -- 0003_attendances.sql
@@ -329,9 +388,12 @@ on conflict do nothing;
 
 -- Makaryo — 0003: absensi clock in / clock out.
 
-create type attendance_status as enum ('on_time', 'late', 'absent');
+do $guard$ begin
+  create type attendance_status as enum ('on_time', 'late', 'absent');
+exception when duplicate_object then null;
+end $guard$;
 
-create table public.attendances (
+create table if not exists public.attendances (
   id             uuid primary key default gen_random_uuid(),
   host_id        uuid not null references public.profiles (id) on delete cascade,
   assignment_id  uuid,
@@ -358,11 +420,14 @@ create table public.attendances (
   updated_at timestamptz not null default now()
 );
 
-create unique index attendances_host_date_assignment_idx
+create unique index if not exists attendances_host_date_assignment_idx
   on public.attendances (host_id, work_date, coalesce(assignment_id, '00000000-0000-0000-0000-000000000000'::uuid));
 
-create index attendances_work_date_idx on public.attendances (work_date desc);
-create index attendances_host_idx on public.attendances (host_id, work_date desc);
+create index if not exists attendances_work_date_idx on public.attendances (work_date desc);
+
+create index if not exists attendances_host_idx on public.attendances (host_id, work_date desc);
+
+drop trigger if exists attendances_set_updated_at on public.attendances;
 
 create trigger attendances_set_updated_at
   before update on public.attendances
@@ -370,18 +435,26 @@ create trigger attendances_set_updated_at
 
 alter table public.attendances enable row level security;
 
+drop policy if exists "host membaca absensinya sendiri" on public.attendances;
+
 create policy "host membaca absensinya sendiri"
   on public.attendances for select
   using (host_id = auth.uid() and public.is_active_user());
+
+drop policy if exists "host mencatat absensinya sendiri" on public.attendances;
 
 create policy "host mencatat absensinya sendiri"
   on public.attendances for insert
   with check (host_id = auth.uid() and public.is_active_user());
 
+drop policy if exists "host memperbarui absensinya sendiri" on public.attendances;
+
 create policy "host memperbarui absensinya sendiri"
   on public.attendances for update
   using (host_id = auth.uid() and public.is_active_user())
   with check (host_id = auth.uid());
+
+drop policy if exists "admin mengelola semua absensi" on public.attendances;
 
 create policy "admin mengelola semua absensi"
   on public.attendances for all
@@ -393,6 +466,8 @@ insert into storage.buckets (id, name, public)
 values ('attendance', 'attendance', false)
 on conflict (id) do nothing;
 
+drop policy if exists "foto absensi dibaca pemilik dan admin" on storage.objects;
+
 create policy "foto absensi dibaca pemilik dan admin"
   on storage.objects for select
   using (
@@ -400,12 +475,16 @@ create policy "foto absensi dibaca pemilik dan admin"
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
 
+drop policy if exists "foto absensi diunggah pemilik atau admin" on storage.objects;
+
 create policy "foto absensi diunggah pemilik atau admin"
   on storage.objects for insert
   with check (
     bucket_id = 'attendance'
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
+
+drop policy if exists "foto absensi dihapus admin" on storage.objects;
 
 create policy "foto absensi dihapus admin"
   on storage.objects for delete
@@ -417,9 +496,12 @@ create policy "foto absensi dihapus admin"
 
 -- Makaryo — 0004: periode jadwal dan penugasan shift.
 
-create type schedule_status as enum ('draft', 'published', 'cancelled');
+do $guard$ begin
+  create type schedule_status as enum ('draft', 'published', 'cancelled');
+exception when duplicate_object then null;
+end $guard$;
 
-create table public.schedule_periods (
+create table if not exists public.schedule_periods (
   id           uuid primary key default gen_random_uuid(),
   start_date   date not null,
   end_date     date not null,
@@ -433,9 +515,9 @@ create table public.schedule_periods (
   unique (start_date, end_date)
 );
 
-create index schedule_periods_range_idx on public.schedule_periods (start_date, end_date);
+create index if not exists schedule_periods_range_idx on public.schedule_periods (start_date, end_date);
 
-create table public.schedule_assignments (
+create table if not exists public.schedule_assignments (
   id         uuid primary key default gen_random_uuid(),
   period_id  uuid references public.schedule_periods (id) on delete set null,
   host_id    uuid not null references public.profiles (id) on delete cascade,
@@ -448,34 +530,49 @@ create table public.schedule_assignments (
   unique (host_id, shift_id, work_date)
 );
 
-create index schedule_assignments_date_idx on public.schedule_assignments (work_date);
-create index schedule_assignments_host_idx on public.schedule_assignments (host_id, work_date);
-create index schedule_assignments_period_idx on public.schedule_assignments (period_id);
+create index if not exists schedule_assignments_date_idx on public.schedule_assignments (work_date);
+
+create index if not exists schedule_assignments_host_idx on public.schedule_assignments (host_id, work_date);
+
+create index if not exists schedule_assignments_period_idx on public.schedule_assignments (period_id);
+
+drop trigger if exists schedule_assignments_set_updated_at on public.schedule_assignments;
 
 create trigger schedule_assignments_set_updated_at
   before update on public.schedule_assignments
   for each row execute function public.set_updated_at();
+
+alter table public.attendances drop constraint if exists attendances_assignment_fkey;
 
 alter table public.attendances
   add constraint attendances_assignment_fkey
   foreign key (assignment_id) references public.schedule_assignments (id) on delete set null;
 
 alter table public.schedule_periods     enable row level security;
+
 alter table public.schedule_assignments enable row level security;
+
+drop policy if exists "admin mengelola periode jadwal" on public.schedule_periods;
 
 create policy "admin mengelola periode jadwal"
   on public.schedule_periods for all
   using (public.is_admin())
   with check (public.is_admin());
 
+drop policy if exists "host membaca periode terpublish" on public.schedule_periods;
+
 create policy "host membaca periode terpublish"
   on public.schedule_periods for select
   using (status = 'published' and public.is_active_user());
 
 -- Host hanya melihat penugasan miliknya yang sudah dipublish.
+drop policy if exists "host membaca jadwalnya sendiri" on public.schedule_assignments;
+
 create policy "host membaca jadwalnya sendiri"
   on public.schedule_assignments for select
   using (host_id = auth.uid() and status = 'published' and public.is_active_user());
+
+drop policy if exists "admin mengelola penugasan" on public.schedule_assignments;
 
 create policy "admin mengelola penugasan"
   on public.schedule_assignments for all
@@ -488,10 +585,17 @@ create policy "admin mengelola penugasan"
 
 -- Makaryo — 0005: pengajuan libur mingguan dan izin mendadak.
 
-create type leave_type as enum ('weekly_off', 'urgent');
-create type leave_status as enum ('pending', 'approved', 'rejected');
+do $guard$ begin
+  create type leave_type as enum ('weekly_off', 'urgent');
+exception when duplicate_object then null;
+end $guard$;
 
-create table public.leave_requests (
+do $guard$ begin
+  create type leave_status as enum ('pending', 'approved', 'rejected');
+exception when duplicate_object then null;
+end $guard$;
+
+create table if not exists public.leave_requests (
   id             uuid primary key default gen_random_uuid(),
   host_id        uuid not null references public.profiles (id) on delete cascade,
   type           leave_type not null,
@@ -505,23 +609,32 @@ create table public.leave_requests (
   unique (host_id, type, requested_date)
 );
 
-create index leave_requests_status_idx on public.leave_requests (status, requested_date);
-create index leave_requests_host_idx on public.leave_requests (host_id, requested_date desc);
+create index if not exists leave_requests_status_idx on public.leave_requests (status, requested_date);
+
+create index if not exists leave_requests_host_idx on public.leave_requests (host_id, requested_date desc);
 
 alter table public.leave_requests enable row level security;
+
+drop policy if exists "host membaca pengajuannya sendiri" on public.leave_requests;
 
 create policy "host membaca pengajuannya sendiri"
   on public.leave_requests for select
   using (host_id = auth.uid() and public.is_active_user());
+
+drop policy if exists "host membuat pengajuannya sendiri" on public.leave_requests;
 
 create policy "host membuat pengajuannya sendiri"
   on public.leave_requests for insert
   with check (host_id = auth.uid() and public.is_active_user() and status = 'pending');
 
 -- Host boleh membatalkan pengajuan yang masih pending.
+drop policy if exists "host menghapus pengajuan pending" on public.leave_requests;
+
 create policy "host menghapus pengajuan pending"
   on public.leave_requests for delete
   using (host_id = auth.uid() and status = 'pending' and public.is_active_user());
+
+drop policy if exists "admin mengelola pengajuan" on public.leave_requests;
 
 create policy "admin mengelola pengajuan"
   on public.leave_requests for all
@@ -534,7 +647,7 @@ create policy "admin mengelola pengajuan"
 
 -- Makaryo — 0006: laporan omzet per shift.
 
-create table public.revenue_reports (
+create table if not exists public.revenue_reports (
   id           uuid primary key default gen_random_uuid(),
   host_id      uuid not null references public.profiles (id) on delete cascade,
   shift_id     uuid references public.shifts (id) on delete set null,
@@ -547,8 +660,11 @@ create table public.revenue_reports (
   updated_at   timestamptz not null default now()
 );
 
-create index revenue_reports_date_idx on public.revenue_reports (work_date desc);
-create index revenue_reports_host_idx on public.revenue_reports (host_id, work_date desc);
+create index if not exists revenue_reports_date_idx on public.revenue_reports (work_date desc);
+
+create index if not exists revenue_reports_host_idx on public.revenue_reports (host_id, work_date desc);
+
+drop trigger if exists revenue_reports_set_updated_at on public.revenue_reports;
 
 create trigger revenue_reports_set_updated_at
   before update on public.revenue_reports
@@ -556,18 +672,26 @@ create trigger revenue_reports_set_updated_at
 
 alter table public.revenue_reports enable row level security;
 
+drop policy if exists "host membaca omzetnya sendiri" on public.revenue_reports;
+
 create policy "host membaca omzetnya sendiri"
   on public.revenue_reports for select
   using (host_id = auth.uid() and public.is_active_user());
+
+drop policy if exists "host melaporkan omzetnya sendiri" on public.revenue_reports;
 
 create policy "host melaporkan omzetnya sendiri"
   on public.revenue_reports for insert
   with check (host_id = auth.uid() and public.is_active_user());
 
+drop policy if exists "host memperbarui omzetnya sendiri" on public.revenue_reports;
+
 create policy "host memperbarui omzetnya sendiri"
   on public.revenue_reports for update
   using (host_id = auth.uid() and public.is_active_user())
   with check (host_id = auth.uid());
+
+drop policy if exists "admin mengelola omzet" on public.revenue_reports;
 
 create policy "admin mengelola omzet"
   on public.revenue_reports for all
@@ -578,6 +702,8 @@ insert into storage.buckets (id, name, public)
 values ('revenue', 'revenue', false)
 on conflict (id) do nothing;
 
+drop policy if exists "bukti omzet dibaca pemilik dan admin" on storage.objects;
+
 create policy "bukti omzet dibaca pemilik dan admin"
   on storage.objects for select
   using (
@@ -585,12 +711,16 @@ create policy "bukti omzet dibaca pemilik dan admin"
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
 
+drop policy if exists "bukti omzet diunggah pemilik atau admin" on storage.objects;
+
 create policy "bukti omzet diunggah pemilik atau admin"
   on storage.objects for insert
   with check (
     bucket_id = 'revenue'
     and (public.is_admin() or (storage.foldername(name))[1] = auth.uid()::text)
   );
+
+drop policy if exists "bukti omzet dihapus admin" on storage.objects;
 
 create policy "bukti omzet dihapus admin"
   on storage.objects for delete
@@ -602,7 +732,7 @@ create policy "bukti omzet dihapus admin"
 
 -- Makaryo — 0007: langganan web push, pusat notifikasi, dan penanda pengiriman.
 
-create table public.push_subscriptions (
+create table if not exists public.push_subscriptions (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references public.profiles (id) on delete cascade,
   endpoint   text not null unique,
@@ -612,9 +742,9 @@ create table public.push_subscriptions (
   created_at timestamptz not null default now()
 );
 
-create index push_subscriptions_user_idx on public.push_subscriptions (user_id);
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id);
 
-create table public.notifications (
+create table if not exists public.notifications (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references public.profiles (id) on delete cascade,
   type       text not null,
@@ -625,11 +755,12 @@ create table public.notifications (
   created_at timestamptz not null default now()
 );
 
-create index notifications_user_idx on public.notifications (user_id, created_at desc);
-create index notifications_unread_idx on public.notifications (user_id) where read_at is null;
+create index if not exists notifications_user_idx on public.notifications (user_id, created_at desc);
+
+create index if not exists notifications_unread_idx on public.notifications (user_id) where read_at is null;
 
 -- Menjaga agar satu pengingat hanya terkirim sekali per penugasan.
-create table public.notification_deliveries (
+create table if not exists public.notification_deliveries (
   id             uuid primary key default gen_random_uuid(),
   assignment_id  uuid not null references public.schedule_assignments (id) on delete cascade,
   offset_minutes smallint not null,
@@ -638,26 +769,37 @@ create table public.notification_deliveries (
 );
 
 alter table public.push_subscriptions      enable row level security;
+
 alter table public.notifications           enable row level security;
+
 alter table public.notification_deliveries enable row level security;
+
+drop policy if exists "langganan push milik sendiri" on public.push_subscriptions;
 
 create policy "langganan push milik sendiri"
   on public.push_subscriptions for all
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
+drop policy if exists "notifikasi milik sendiri dibaca" on public.notifications;
+
 create policy "notifikasi milik sendiri dibaca"
   on public.notifications for select
   using (user_id = auth.uid());
+
+drop policy if exists "notifikasi milik sendiri ditandai terbaca" on public.notifications;
 
 create policy "notifikasi milik sendiri ditandai terbaca"
   on public.notifications for update
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
 
+drop policy if exists "admin membaca penanda pengiriman" on public.notification_deliveries;
+
 create policy "admin membaca penanda pengiriman"
   on public.notification_deliveries for select
   using (public.is_admin());
+
 
 -- =====================================================================
 -- Selesai. Yang seharusnya terbentuk:

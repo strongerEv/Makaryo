@@ -62,9 +62,12 @@ create policy "admin mengubah pengaturan"
 insert into public.app_settings (id) values (1) on conflict (id) do nothing;
 
 -- Tiga shift bawaan dalam rentang operasional 06.00–21.00. Jamnya boleh diubah admin.
+-- Hanya diisi saat tabel masih kosong, agar migrasi aman dijalankan ulang.
 insert into public.shifts (name, start_time, end_time, min_hosts, color, sort_order)
-values
-  ('Shift Pagi',  '06:00', '11:00', 1, 'amber',   1),
-  ('Shift Siang', '11:00', '16:00', 1, 'primary', 2),
-  ('Shift Sore',  '16:00', '21:00', 1, 'coral',   3)
-on conflict do nothing;
+select *
+from (values
+  ('Shift Pagi',  time '06:00', time '11:00', 1, 'amber',   1),
+  ('Shift Siang', time '11:00', time '16:00', 1, 'primary', 2),
+  ('Shift Sore',  time '16:00', time '21:00', 1, 'coral',   3)
+) as seed(name, start_time, end_time, min_hosts, color, sort_order)
+where not exists (select 1 from public.shifts);
