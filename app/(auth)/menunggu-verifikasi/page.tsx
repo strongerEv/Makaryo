@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { Ban, Clock3, ShieldX } from "lucide-react";
+import { Ban, Clock3, ShieldX, UserRoundX } from "lucide-react";
 
 import { signOutAction } from "@/app/(auth)/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getCurrentProfile, homePathFor } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { StatusWatcher } from "./status-watcher";
 
 export const metadata: Metadata = { title: "Menunggu verifikasi" };
@@ -30,14 +31,28 @@ const CONTENT = {
     title: "Akun dinonaktifkan",
     body: "Akses akun ini sedang dinonaktifkan admin. Hubungi admin untuk mengaktifkannya kembali.",
   },
+  missing: {
+    icon: UserRoundX,
+    tone: "bg-coral-soft text-[#c73f35]",
+    title: "Data profil belum terbentuk",
+    body: "Akun ini terdaftar, tetapi data profilnya belum ada di database. Biasanya ini terjadi bila akunnya dibuat sebelum setup database dijalankan. Hubungi admin, lalu keluar dan masuk kembali.",
+  },
 } as const;
 
 export default async function PendingVerificationPage() {
-  const profile = await getCurrentProfile();
-  if (!profile) redirect("/login");
-  if (profile.account_status === "active") redirect(homePathFor(profile));
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const status = profile.account_status as keyof typeof CONTENT;
+  if (!user) redirect("/login");
+
+  const profile = await getCurrentProfile();
+  if (profile?.account_status === "active") redirect(homePathFor(profile));
+
+  // Pengguna yang sudah masuk tetapi belum punya baris profil ditahan di sini juga.
+  // Memantulkannya ke /login hanya akan berputar, karena middleware mengembalikannya lagi.
+  const status: keyof typeof CONTENT = profile ? profile.account_status : "missing";
   const { icon: Icon, tone, title, body } = CONTENT[status];
 
   return (
@@ -49,7 +64,7 @@ export default async function PendingVerificationPage() {
       <h1 className="text-xl font-bold text-ink">{title}</h1>
       <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-ink-muted">{body}</p>
 
-      {profile.account_note ? (
+      {profile?.account_note ? (
         <Alert tone="warning" className="mt-4 text-left">
           <span className="font-semibold">Catatan admin:</span> {profile.account_note}
         </Alert>
@@ -58,11 +73,11 @@ export default async function PendingVerificationPage() {
       <dl className="mt-5 space-y-2 rounded-[var(--radius-md)] bg-surface-muted px-4 py-3.5 text-left text-[13px]">
         <div className="flex justify-between gap-3">
           <dt className="text-ink-muted">Nama</dt>
-          <dd className="truncate font-semibold text-ink">{profile.full_name}</dd>
+          <dd className="truncate font-semibold text-ink">{profile?.full_name ?? "—"}</dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-ink-muted">Email</dt>
-          <dd className="truncate font-semibold text-ink">{profile.email}</dd>
+          <dd className="truncate font-semibold text-ink">{profile?.email ?? user.email ?? "—"}</dd>
         </div>
       </dl>
 
@@ -72,7 +87,7 @@ export default async function PendingVerificationPage() {
         </Button>
       </form>
 
-      {status === "pending" ? <StatusWatcher userId={profile.id} /> : null}
+      {status === "pending" ? <StatusWatcher userId={user.id} /> : null}
     </Card>
   );
 }
