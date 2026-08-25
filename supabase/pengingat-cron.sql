@@ -37,11 +37,13 @@ select cron.schedule(
 -- Jadwal yang terpasang:
 --   select jobname, schedule, active from cron.job;
 --
--- Sepuluh percobaan terakhir (status 'succeeded' berarti panggilan terkirim):
---   select start_time, status, return_message
---   from cron.job_run_details
---   where jobname = 'makaryo-pengingat-shift'
---   order by start_time desc
+-- Sepuluh percobaan terakhir (status 'succeeded' berarti panggilan terkirim).
+-- Riwayat hanya menyimpan jobid, jadi namanya diambil lewat tabel cron.job:
+--   select d.start_time, d.status, d.return_message
+--   from cron.job_run_details d
+--   join cron.job j on j.jobid = d.jobid
+--   where j.jobname = 'makaryo-pengingat-shift'
+--   order by d.start_time desc
 --   limit 10;
 --
 -- Balasan dari aplikasi (harus berisi {"ok":true,...}):

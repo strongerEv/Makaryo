@@ -27,12 +27,16 @@ Tidak perlu akun baru, tidak ada biaya, dan berada satu atap dengan database.
 3. Periksa hasilnya:
 
 ```sql
+-- Jadwal yang terpasang
 select jobname, schedule, active from cron.job;
 
-select start_time, status
-from cron.job_run_details
-where jobname = 'makaryo-pengingat-shift'
-order by start_time desc
+-- Riwayat percobaannya. Tabel riwayat hanya menyimpan jobid,
+-- jadi nama jadwalnya diambil lewat cron.job.
+select d.start_time, d.status, d.return_message
+from cron.job_run_details d
+join cron.job j on j.jobid = d.jobid
+where j.jobname = 'makaryo-pengingat-shift'
+order by d.start_time desc
 limit 5;
 ```
 
