@@ -4,7 +4,11 @@ import { shiftStartInstant } from "@/lib/attendance/time";
 import { isAuthorizedCron } from "@/lib/cron/auth";
 import { notifyUsers } from "@/lib/notifications/notify";
 import { crossedReminderStages, reminderLabel } from "@/lib/notifications/reminder";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  createAdminClient,
+  isServiceRoleConfigured,
+  SERVICE_ROLE_MISSING_MESSAGE,
+} from "@/lib/supabase/admin";
 import type { Shift } from "@/lib/types/database";
 import { formatClock, todayInJakarta } from "@/lib/utils/datetime";
 import { addDays } from "@/lib/utils/period";
@@ -24,6 +28,10 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   if (!isAuthorizedCron(request)) {
     return NextResponse.json({ error: "Tidak diizinkan." }, { status: 401 });
+  }
+
+  if (!isServiceRoleConfigured()) {
+    return NextResponse.json({ error: SERVICE_ROLE_MISSING_MESSAGE }, { status: 500 });
   }
 
   const admin = createAdminClient();

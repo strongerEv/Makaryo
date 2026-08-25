@@ -1,4 +1,5 @@
 import {
+  Activity,
   CalendarDays,
   ClipboardList,
   FileBarChart,
@@ -41,4 +42,5 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/laporan", label: "Laporan", icon: FileBarChart },
   { href: "/admin/shift", label: "Pengaturan Shift", icon: Settings2 },
   { href: "/admin/riwayat", label: "Riwayat Aktivitas", icon: History },
+  { href: "/admin/diagnostik", label: "Diagnostik", icon: Activity },
 ];

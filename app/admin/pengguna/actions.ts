@@ -5,7 +5,11 @@ import { z } from "zod";
 
 import { logAudit } from "@/lib/auth/audit";
 import { requireAdmin } from "@/lib/auth/session";
-import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  createAdminClient,
+  isServiceRoleConfigured,
+  SERVICE_ROLE_MISSING_MESSAGE,
+} from "@/lib/supabase/admin";
 import { todayInJakarta } from "@/lib/utils/datetime";
 import type { Profile } from "@/lib/types/database";
 
@@ -67,6 +71,8 @@ export async function approveUserAction(_prev: ActionState, formData: FormData):
   const userId = String(formData.get("userId") ?? "");
   if (!userId) return fail("Pengguna tidak ditemukan.");
 
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
+
   const client = createAdminClient();
   const { data: before } = await client.from("profiles").select("*").eq("id", userId).single();
   if (!before) return fail("Pengguna tidak ditemukan.");
@@ -108,6 +114,8 @@ export async function rejectUserAction(_prev: ActionState, formData: FormData): 
   if (!userId) return fail("Pengguna tidak ditemukan.");
   if (note.length < 5) return fail("Tuliskan alasan penolakan minimal 5 karakter.");
 
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
+
   const client = createAdminClient();
   const { data: before } = await client.from("profiles").select("*").eq("id", userId).single();
   if (!before) return fail("Pengguna tidak ditemukan.");
@@ -147,6 +155,8 @@ export async function setAccountStatusAction(_prev: ActionState, formData: FormD
   if (!userId) return fail("Pengguna tidak ditemukan.");
   if (userId === admin.id) return fail("Kamu tidak bisa mengubah status akunmu sendiri.");
   if (status !== "active" && status !== "suspended") return fail("Status tidak dikenal.");
+
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
 
   const client = createAdminClient();
   const { data: before } = await client.from("profiles").select("*").eq("id", userId).single();
@@ -196,6 +206,8 @@ export async function createUserAction(_prev: ActionState, formData: FormData): 
     weeklyDayOffQuota: formData.get("weeklyDayOffQuota") ?? 1,
   });
   if (!parsed.success) return fail(firstIssue(parsed.error));
+
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
 
   const client = createAdminClient();
   const { data: created, error: createError } = await client.auth.admin.createUser({
@@ -266,6 +278,8 @@ export async function updateUserAction(_prev: ActionState, formData: FormData): 
   });
   if (!parsed.success) return fail(firstIssue(parsed.error));
 
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
+
   const client = createAdminClient();
   const { data: before } = await client.from("profiles").select("*").eq("id", parsed.data.userId).single();
   if (!before) return fail("Pengguna tidak ditemukan.");
@@ -327,6 +341,8 @@ export async function deleteUserAction(_prev: ActionState, formData: FormData): 
 
   if (!userId) return fail("Pengguna tidak ditemukan.");
   if (userId === admin.id) return fail("Kamu tidak bisa menghapus akunmu sendiri.");
+
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
 
   const client = createAdminClient();
   const { data: before } = await client.from("profiles").select("*").eq("id", userId).single();
