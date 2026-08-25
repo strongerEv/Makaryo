@@ -25,6 +25,10 @@ erDiagram
 ### profiles
 Perpanjangan `auth.users`. Satu baris per pengguna.
 
+Baris dibuat otomatis oleh trigger `on_auth_user_created` saat pendaftaran mandiri, dengan
+`role = 'host'` dan `account_status = 'pending'`. Akun yang dibuat admin lewat route handler
+langsung disetel `account_status = 'active'`.
+
 | Kolom | Tipe | Catatan |
 |---|---|---|
 | id | uuid PK | = `auth.users.id` |
@@ -37,6 +41,10 @@ Perpanjangan `auth.users`. Satu baris per pengguna.
 | birth_date | date | |
 | join_date | date | tanggal mulai kerja |
 | employment_status | text | `active` \| `inactive` \| `long_leave` |
+| account_status | text | `pending` \| `active` \| `rejected` \| `suspended` — hasil verifikasi admin |
+| account_note | text | alasan penolakan / penonaktifan, ditampilkan ke pengguna |
+| reviewed_by | uuid FK profiles | admin yang memverifikasi |
+| reviewed_at | timestamptz | kapan diverifikasi |
 | bank_account | text | opsional, untuk payroll ke depan |
 | weekly_day_off_quota | int | default 1 |
 | created_at, updated_at | timestamptz | |
@@ -199,9 +207,9 @@ Unik: `(assignment_id, offset_minutes)`.
 |---|---|---|
 | id | uuid PK | |
 | actor_id | uuid FK profiles | siapa yang melakukan |
-| entity | text | `schedule` \| `leave_request` \| `revenue` \| `shift` \| `attendance` |
+| entity | text | `user` \| `schedule` \| `leave_request` \| `revenue` \| `shift` \| `attendance` |
 | entity_id | uuid | |
-| action | text | `create` \| `update` \| `approve` \| `reject` \| `publish` |
+| action | text | `create` \| `update` \| `delete` \| `approve` \| `reject` \| `suspend` \| `publish` |
 | target_user_id | uuid FK profiles | data milik siapa yang terdampak |
 | before, after | jsonb | nilai sebelum & sesudah |
 | created_at | timestamptz | |
@@ -213,7 +221,11 @@ RLS aktif di semua tabel. Pola dasarnya:
 - Fungsi helper `is_admin()` membaca `role` dari `profiles` pengguna saat ini.
 - **Admin**: boleh baca dan tulis semua baris di semua tabel.
 - **Host**:
-  - `profiles` — baca & ubah barisnya sendiri (kolom kepegawaian read-only bagi host).
+  - `profiles` — baca & ubah barisnya sendiri. Kolom kepegawaian (`employment_status`,
+    `account_status`, `role`, `weekly_day_off_quota`, `join_date`) **tidak boleh** diubah host;
+    dijaga oleh trigger `profiles_guard_privileged_columns`.
+  - Seluruh tabel operasional hanya dapat diakses host ber-`account_status = 'active'`
+    (dicek oleh fungsi `is_active_user()` di setiap kebijakan).
   - `schedule_assignments` — baca miliknya sendiri **dan** hanya yang `status = 'published'`.
   - `attendances` — baca miliknya sendiri, insert & update hanya untuk dirinya sendiri.
   - `leave_requests` — baca & insert miliknya sendiri; kolom `status`/`reviewed_*` hanya admin.
@@ -230,8 +242,8 @@ Host hanya boleh mengunggah ke prefix `{user_id}/`.
 File SQL bernomor di `supabase/migrations/`, satu file per sesi:
 
 ```
-0001_init_profiles_and_auth.sql
-0002_shifts_and_settings.sql
+0001_init_profiles_and_auth.sql   -- profil, peran, status akun, RLS, audit log
+0002_shifts_and_settings.sql      -- shift, pengaturan aplikasi, seed
 0003_attendances.sql
 0004_schedules.sql
 0005_leave_requests.sql

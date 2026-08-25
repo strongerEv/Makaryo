@@ -12,3 +12,5 @@ karenanya — pilih asumsi paling wajar, tulis asumsinya, dan lanjutkan.
 | 5 | Berapa lama foto absensi disimpan? | Disimpan tanpa batas waktu untuk sekarang. Kalau kuota storage jadi masalah, tambahkan kebijakan hapus otomatis (mis. 6 bulan). | Sesi 9 |
 | 6 | Apakah host boleh melihat omzet host lain? | Tidak. Host hanya melihat omzet miliknya sendiri. | Sesi 7 |
 | 7 | Shift yang melewati tengah malam | Didukung skema (`end_time <= start_time` berarti selesai keesokan hari), tapi di luar rentang operasional 06.00–21.00 saat ini. | Sesi 4 |
+| 8 | Apakah pendaftaran mandiri perlu dibatasi (mis. hanya email domain tertentu)? | Terbuka untuk siapa saja, tetapi tidak ada akses sebelum admin menyetujui. | Sesi 9 |
+| 9 | Admin pertama dibuat bagaimana? | Lewat SQL sekali di Supabase (lihat README). Sesudah itu admin bisa dibuat dari halaman Kelola Pengguna. | — |

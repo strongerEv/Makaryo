@@ -19,12 +19,36 @@ Dokumen ini adalah versi kerja yang dipakai selama pengembangan.
 ## 1. Autentikasi & manajemen pengguna
 
 - Login email + password, dua role: Admin dan Host.
-- Akun host dibuat oleh admin. Tidak ada self-register.
 - Admin hanya satu level, tidak ada super admin.
 - Reset password (lupa password) tersedia untuk kedua role.
-- Setelah login, pengguna diarahkan ke beranda sesuai rolenya.
+- Setelah login, pengguna diarahkan sesuai role **dan status akunnya**.
 
-## 2. Data master karyawan (host)
+### Status akun & verifikasi admin
+
+Setiap akun punya status: `pending`, `active`, `rejected`, atau `suspended`.
+
+| Status | Arti | Yang dilihat pengguna |
+|---|---|---|
+| `pending` | Baru mendaftar, menunggu verifikasi admin | Halaman tunggu "Menunggu Verifikasi" |
+| `active` | Sudah disetujui admin | Aplikasi penuh sesuai rolenya |
+| `rejected` | Ditolak admin | Halaman pemberitahuan + alasan penolakan |
+| `suspended` | Dinonaktifkan admin | Halaman pemberitahuan akun dinonaktifkan |
+
+**Dua jalur pembuatan akun:**
+
+1. **Daftar mandiri** — calon host mengisi form pendaftaran (nama, email, nomor HP, password).
+   Akun dibuat dengan status `pending`, langsung diarahkan ke halaman tunggu, dan admin
+   menerima notifikasi ada pendaftar baru. Pengguna `pending` tidak bisa membuka halaman
+   mana pun selain halaman tunggu.
+2. **Dibuat admin** — admin membuat akun host lewat halaman Kelola Pengguna dan menetapkan
+   password awal. Akun ini langsung berstatus `active`.
+
+Halaman tunggu memeriksa status secara berkala, sehingga begitu admin menyetujui, pengguna
+otomatis masuk ke beranda tanpa perlu login ulang.
+
+Verifikasi, penolakan, penonaktifan, dan penghapusan akun semuanya tercatat di audit log.
+
+## 2. Data master karyawan (host) & kelola pengguna
 
 **Data pribadi:** nama lengkap, foto profil, nomor HP aktif (kontak darurat), email (untuk login),
 alamat domisili, tanggal lahir.
@@ -35,6 +59,21 @@ jatah libur mingguan (default 1x/minggu, bisa di-override per orang oleh admin).
 
 **Data otomatis dari sistem:** total jam kerja bulan berjalan, statistik kehadiran
 (tepat waktu / telat / tidak absen).
+
+### Halaman Kelola Pengguna (admin)
+
+- Daftar seluruh pengguna dengan pencarian dan filter berdasarkan status akun serta status kepegawaian.
+- Tab **Menunggu Verifikasi** dengan badge jumlah pendaftar baru: setujui atau tolak
+  (penolakan wajib menyertakan alasan).
+- **Tambah pengguna manual**: admin mengisi data dan password awal; akun langsung aktif.
+  Bisa dibuat sebagai host maupun admin.
+- **Edit** seluruh data pribadi dan kepegawaian milik host.
+- **Nonaktifkan** akun (status `suspended`) — pengguna tidak bisa masuk, tetapi seluruh riwayat
+  absensi, jadwal, dan omzetnya tetap utuh. Ini cara yang dianjurkan.
+- **Hapus permanen** akun, tersedia dengan konfirmasi ketik ulang nama. Dipakai hanya untuk
+  pendaftar salah/spam yang belum punya riwayat. Bila akun sudah punya riwayat absensi atau
+  omzet, sistem menolak dan menyarankan penonaktifan.
+- Admin tidak dapat menonaktifkan atau menghapus akunnya sendiri.
 
 ## 3. Modul absensi (clock in / clock out)
 
@@ -169,13 +208,14 @@ Diakses admin lewat halaman terpisah "Riwayat Aktivitas".
 | Jadwal | Kalender harian/mingguan/bulanan |
 | Pengajuan | Form libur mingguan (bila dibuka admin) & izin mendadak, plus status pengajuan |
 | Omzet | Form input omzet per shift + riwayat milik sendiri |
-| Profil | Data diri, status izin notifikasi, panduan install PWA, logout |
+| Profil | Data diri, ganti kata sandi, status izin notifikasi, panduan install PWA, logout |
 
 ### Admin (desktop-first, tetap jalan di mobile)
 | Halaman | Isi |
 |---|---|
 | Dashboard | Ringkasan hari ini, kartu perlu tindakan, dua chart ringkas |
-| Karyawan | Tabel host, tambah/edit, detail statistik per host |
+| Kelola Pengguna | Tabel pengguna, antrian verifikasi pendaftar, tambah manual, edit, nonaktifkan, hapus |
+| Detail Host | Data pribadi & kepegawaian, statistik kehadiran, jam kerja bulan berjalan |
 | Jadwal | Kalender gabungan, editor assign, generate draft, publish |
 | Approval | Antrian pengajuan izin & libur, toggle buka/tutup periode pengajuan |
 | Absensi | Monitor kehadiran seluruh host + filter |

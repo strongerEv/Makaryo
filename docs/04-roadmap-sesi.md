@@ -9,8 +9,8 @@ hijau → commit → push → tandai sesi selesai di tabel bawah.
 | Sesi | Fokus | Status |
 |---|---|---|
 | 0 | Fondasi dokumen, skema DB, design system | ✅ selesai |
-| 1 | Scaffold, design system, layout responsif, autentikasi | ⬜ |
-| 2 | Master data karyawan + pengaturan shift | ⬜ |
+| 1 | Scaffold, design system, layout responsif, autentikasi + verifikasi admin | ✅ selesai |
+| 2 | Kelola pengguna (verifikasi, tambah, edit, hapus) + pengaturan shift | ✅ selesai |
 | 3 | Absensi (clock in/out, selfie, GPS, riwayat) | ⬜ |
 | 4 | Jadwal & kalender (host + admin, publish) | ⬜ |
 | 5 | Generator jadwal otomatis + review draft | ⬜ |
@@ -21,37 +21,40 @@ hijau → commit → push → tandai sesi selesai di tabel bawah.
 
 ---
 
-## Sesi 1 — Fondasi aplikasi & autentikasi
+## Sesi 1 — Fondasi aplikasi & autentikasi ✅
 
 **Lingkup**
 - Scaffold Next.js 15 (App Router, TypeScript strict) + Tailwind v4 + struktur direktori sesuai `CLAUDE.md`.
-- Klien Supabase (browser & server) + middleware sesi. `.env.example` diisi lengkap.
-- Migrasi `0001_init_profiles_and_auth.sql`: tabel `profiles`, enum peran, fungsi `is_admin()`,
-  trigger pembuatan profil, kebijakan RLS.
+- Klien Supabase (browser, server, admin) + middleware sesi. `.env.example` diisi lengkap.
+- Migrasi `0001`: `profiles` (termasuk `account_status`), fungsi `is_admin()` & `is_active_user()`,
+  trigger pembuatan profil, trigger penjaga kolom istimewa, tabel `audit_logs`, kebijakan RLS.
 - Token design system diterjemahkan ke Tailwind + komponen `ui/` inti.
 - `AppShell` responsif: bottom nav di mobile, sidebar di desktop.
-- Halaman login, lupa password, reset password. Penjaga rute berbasis peran + pengalihan
-  ke beranda host atau dashboard admin.
-- Halaman beranda placeholder untuk kedua peran (memakai `ModuleCard` berwarna sesuai referensi).
+- Halaman login, daftar mandiri, lupa password, reset password, dan **halaman tunggu verifikasi**
+  yang memeriksa status secara berkala.
+- Penjaga rute berbasis peran **dan status akun**; pengalihan ke beranda host atau dashboard admin.
+- Beranda placeholder untuk kedua peran memakai kartu modul berwarna sesuai referensi.
 
-**Selesai bila:** bisa login sebagai admin dan sebagai host, masing-masing mendarat di halaman
-yang benar, nav berpindah bentuk dengan benar di 360px dan 1440px, dan build hijau.
+**Selesai bila:** pendaftar baru mendarat di halaman tunggu, admin bisa menyetujuinya, dan
+sesudah disetujui pengguna otomatis masuk ke beranda. Build hijau, nav benar di 360px dan 1440px.
 
-## Sesi 2 — Master karyawan & pengaturan shift
+## Sesi 2 — Kelola pengguna & pengaturan shift ✅
 
 **Lingkup**
 - Migrasi `0002`: `shifts`, `app_settings`, seed 3 shift default (06.00–21.00) + baris setting.
-- Admin: daftar host (tabel di desktop, kartu di mobile), tambah host (membuat akun auth +
-  profil lewat route handler dengan service role), edit, ubah status kepegawaian,
-  atur jatah libur mingguan per host.
-- Halaman detail host: data pribadi, data kepegawaian, tempat untuk statistik (diisi sesi 3).
-- Unggah foto profil ke Storage.
-- Admin: pengaturan shift — tambah, edit, nonaktifkan (tidak menghapus), atur nama/jam/minimum host,
-  toleransi telat, jam operasional.
-- Host: halaman profil (lihat data, ubah data pribadi terbatas, ganti kata sandi).
+- Admin — halaman **Kelola Pengguna**: daftar dengan pencarian & filter, tab antrian verifikasi
+  dengan badge, setujui/tolak (alasan wajib saat menolak), tambah pengguna manual (host atau admin)
+  lewat route handler dengan service role, edit data pribadi & kepegawaian, nonaktifkan,
+  dan hapus permanen dengan konfirmasi (ditolak bila akun sudah punya riwayat).
+- Halaman detail host: data pribadi, data kepegawaian, tempat statistik kehadiran (diisi sesi 3).
+- Unggah foto profil ke Storage bucket `avatars`.
+- Admin — **Pengaturan Shift**: tambah, edit, nonaktifkan (tidak menghapus), atur nama/jam/minimum host,
+  toleransi telat, dan jam operasional.
+- Host — halaman profil: lihat & ubah data pribadi terbatas, ganti kata sandi.
+- Setiap aksi verifikasi, perubahan, dan penghapusan tercatat di `audit_logs`.
 
-**Selesai bila:** admin bisa membuat akun host baru yang langsung bisa login, dan shift bisa
-dikelola sepenuhnya.
+**Selesai bila:** admin bisa memverifikasi pendaftar, membuat akun host baru yang langsung bisa
+login, mengedit dan menonaktifkannya, serta mengelola shift sepenuhnya.
 
 ## Sesi 3 — Absensi
 

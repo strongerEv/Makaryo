@@ -1,4 +1,4 @@
-# HostFlow — Aplikasi Manajemen Karyawan Host Live Streaming
+# Makaryo — Aplikasi Manajemen Karyawan Host Live Streaming
 
 PWA untuk mengelola operasional karyawan host live streaming: absensi berfoto + GPS,
 penjadwalan shift otomatis, pengajuan izin/libur, pengingat jam kerja, pelaporan omzet,
@@ -24,7 +24,7 @@ Kalau menemukan hal yang benar-benar belum diputuskan, catat di
 | Framework | Next.js 15 (App Router) + TypeScript strict |
 | Styling | Tailwind CSS v4 + komponen sendiri (lihat design system) |
 | Database | Supabase Postgres + Row Level Security |
-| Auth | Supabase Auth (email + password), role di tabel `profiles` |
+| Auth | Supabase Auth (email + password), role & status akun di tabel `profiles` |
 | Storage | Supabase Storage — bucket `attendance` (selfie) & `revenue` (bukti omzet) |
 | Penjadwalan | Algoritma rule-based di `lib/scheduling/` — deterministik, tanpa panggilan LLM |
 | Notifikasi | Service Worker + Web Push (VAPID) |
@@ -47,7 +47,7 @@ Kalau menemukan hal yang benar-benar belum diputuskan, catat di
 
 ```
 app/
-  (auth)/login, forgot-password, reset-password
+  (auth)/login, daftar, lupa-password, reset-password, menunggu-verifikasi
   (host)/        — halaman untuk role host
   (admin)/       — halaman untuk role admin
   api/           — route handler (cron, push, export)
@@ -80,4 +80,15 @@ npm run typecheck
 - **Host** — hanya melihat dan mengubah datanya sendiri: absensi, jadwal, pengajuan,
   dan input omzet shift-nya.
 
-Akun host **dibuat oleh admin**, tidak ada pendaftaran mandiri.
+## Alur akun
+
+Setiap akun punya `account_status`: `pending` → `active`, atau `rejected` / `suspended`.
+
+- Calon host boleh **mendaftar sendiri**, tetapi akunnya masuk status `pending` dan
+  belum bisa memakai aplikasi — ia diarahkan ke **halaman tunggu** (`/menunggu-verifikasi`).
+- **Admin memverifikasi**: setujui (jadi `active`) atau tolak (jadi `rejected`, dengan alasan).
+- Admin juga bisa **membuat akun host secara manual**, yang langsung berstatus `active`.
+- Admin dapat mengubah data, menonaktifkan, dan menghapus akun host.
+
+Semua penjaga akses ada di `middleware.ts` + helper `lib/auth/`: pengguna `pending` hanya boleh
+membuka halaman tunggu, pengguna `rejected`/`suspended` hanya melihat pesan penolakan.
