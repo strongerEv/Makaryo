@@ -30,9 +30,12 @@ Dua peran: **Admin** (satu level, mengelola semuanya) dan **Host** (melihat dan 
 
 ### 1. Siapkan proyek Supabase
 
-Buat proyek baru di [supabase.com](https://supabase.com), lalu jalankan isi berkas
-`supabase/migrations/*.sql` **berurutan** lewat SQL Editor (atau `supabase db push`
-bila memakai Supabase CLI).
+Buat proyek baru di [supabase.com](https://supabase.com), lalu siapkan databasenya lewat
+**SQL Editor**. Ada dua cara:
+
+- **Sekali jalan** — salin seluruh isi `supabase/setup-lengkap.sql`, tempel, klik Run.
+- **Satu per satu** — jalankan `supabase/migrations/*.sql` **berurutan** dari 0001 sampai 0007
+  (atau `supabase db push` bila memakai Supabase CLI).
 
 Migrasi membuat seluruh tabel, kebijakan RLS, tiga shift bawaan 06.00–21.00, serta bucket
 Storage `avatars`, `attendance`, dan `revenue` (semuanya privat, diakses lewat signed URL).
