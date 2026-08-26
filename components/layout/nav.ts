@@ -18,7 +18,8 @@ export type NavIconName =
   | "reports"
   | "shift"
   | "history"
-  | "diagnostics";
+  | "diagnostics"
+  | "demo";
 
 export type NavItem = {
   href: string;
@@ -48,4 +49,5 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/shift", label: "Pengaturan Shift", icon: "shift" },
   { href: "/admin/riwayat", label: "Riwayat Aktivitas", icon: "history" },
   { href: "/admin/diagnostik", label: "Diagnostik", icon: "diagnostics" },
+  { href: "/admin/data-contoh", label: "Data Contoh", icon: "demo" },
 ];

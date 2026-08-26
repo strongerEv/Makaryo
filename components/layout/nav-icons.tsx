@@ -10,6 +10,7 @@ import {
   Inbox,
   LayoutDashboard,
   ScanFace,
+  Sparkles,
   Settings2,
   User,
   Users,
@@ -34,4 +35,5 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   shift: Settings2,
   history: History,
   diagnostics: Activity,
+  demo: Sparkles,
 };
