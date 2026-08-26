@@ -58,7 +58,12 @@ export function UserMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 bottom-full z-50 mb-2 w-56 overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)] lg:top-full lg:bottom-auto lg:mt-2 lg:mb-0"
+          /*
+            Mobile: pemicunya di ujung kanan header, jadi menu turun ke bawah dan rata kanan.
+            Desktop: pemicunya di kaki sidebar yang sempit, jadi menu naik ke atas dan
+            rata kiri agar tidak menjorok keluar layar.
+          */
+          className="absolute top-full right-0 z-50 mt-2 w-56 overflow-hidden rounded-[var(--radius-md)] border border-line bg-surface p-1.5 shadow-[var(--shadow-pop)] lg:top-auto lg:right-auto lg:bottom-full lg:left-0 lg:mt-0 lg:mb-2"
         >
           <Link
             href={profileHref}
