@@ -5,53 +5,38 @@ import { updateSession } from "@/lib/supabase/middleware";
 /** Halaman yang boleh diakses tanpa masuk. */
 const PUBLIC_PATHS = ["/login", "/daftar", "/lupa-password", "/auth"];
 
-/** Satu-satunya halaman untuk akun yang belum aktif. */
-const GATE_PATH = "/menunggu-verifikasi";
-
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
+/**
+ * Middleware hanya mengurus satu hal: memastikan ada sesi.
+ *
+ * Pemeriksaan peran dan status akun sengaja tidak dilakukan di sini, melainkan
+ * di layout masing-masing area lewat requireAdmin / requireHost. Middleware
+ * berjalan pada setiap permintaan termasuk prefetch, jadi satu query database
+ * di sini terasa sebagai jeda tiap kali berpindah halaman.
+ */
 export async function middleware(request: NextRequest) {
-  const { supabase, response, user } = await updateSession(request);
+  const { response, user } = await updateSession(request);
   const { pathname, search } = request.nextUrl;
-
-  const redirectTo = (path: string) => {
-    const url = request.nextUrl.clone();
-    url.pathname = path;
-    url.search = "";
-    return NextResponse.redirect(url);
-  };
 
   if (!user) {
     if (isPublic(pathname)) return response;
+
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname + search)}`;
     return NextResponse.redirect(url);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, account_status")
-    .eq("id", user.id)
-    .single();
-
-  // Profil belum terbentuk (jeda trigger) — perlakukan seperti akun menunggu verifikasi.
-  const accountStatus = profile?.account_status ?? "pending";
-  const role = profile?.role ?? "host";
-  const home = role === "admin" ? "/admin/dashboard" : "/beranda";
-
-  if (accountStatus !== "active") {
-    return pathname === GATE_PATH ? response : redirectTo(GATE_PATH);
-  }
-
-  if (isPublic(pathname) || pathname === GATE_PATH || pathname === "/") {
-    return redirectTo(home);
-  }
-
-  if (role !== "admin" && pathname.startsWith("/admin")) {
-    return redirectTo("/beranda");
+  // Sudah masuk tetapi membuka halaman tamu: biarkan halaman beranda yang
+  // menentukan tujuannya, karena ia yang tahu peran dan status akunnya.
+  if (isPublic(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
 
   return response;

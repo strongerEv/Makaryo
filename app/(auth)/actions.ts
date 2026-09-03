@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { homePathFor } from "@/lib/auth/session";
+import { getAdminIds, notifyUsers } from "@/lib/notifications/notify";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = { error?: string; success?: string };
@@ -95,6 +96,16 @@ export async function signUpAction(_prev: AuthState, formData: FormData): Promis
     },
   });
   if (error) return { error: translateAuthError(error.message) };
+
+  // Admin perlu tahu ada yang menunggu diverifikasi, tanpa harus membuka aplikasi.
+  const adminIds = await getAdminIds();
+  await notifyUsers({
+    userIds: adminIds,
+    type: "new_request",
+    title: "Pendaftar baru menunggu verifikasi",
+    body: `${parsed.data.fullName} mendaftar sebagai host. Tinjau dan setujui bila sesuai.`,
+    link: "/admin/approval",
+  });
 
   // Bila konfirmasi email diaktifkan di Supabase, sesi belum terbentuk.
   if (!data.session) {
