@@ -15,6 +15,7 @@ import type { RevenueReport, Shift } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils/format";
 import { todayInJakarta } from "@/lib/utils/datetime";
 import { currentMonth, monthRange } from "@/lib/utils/period";
+import { LiveSync } from "@/lib/realtime/live-sync";
 
 export const metadata: Metadata = { title: "Omzet" };
 
@@ -52,6 +53,8 @@ export default async function HostRevenuePage({
 
   return (
     <>
+      <LiveSync tables={["revenue_reports", "schedule_assignments"]} />
+
       <PageHeader title="Omzet" description="Laporkan hasil tiap shift beserta bukti." />
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

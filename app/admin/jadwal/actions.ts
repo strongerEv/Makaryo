@@ -311,3 +311,110 @@ export async function publishScheduleAction(_prev: ActionState, formData: FormDa
   revalidateSchedule();
   return { success: `Jadwal ${monthLabel(month)} dipublish ke ${hostIds.length} host.` };
 }
+
+/**
+ * Menghapus jadwal satu periode bulanan.
+ *
+ * Dipakai bila jadwal yang tersusun perlu dibongkar dan dibuat ulang dari nol.
+ * Admin memilih sendiri bulan mana yang direset, dan bisa membatasi hanya pada
+ * draft supaya jadwal yang sudah dilihat host tidak ikut hilang.
+ */
+export async function resetScheduleAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const month = String(formData.get("bulan") ?? "");
+  if (!/^\d{4}-\d{2}$/.test(month)) return { error: "Pilih bulan yang mau direset." };
+
+  const scope = String(formData.get("cakupan") ?? "draft") === "semua" ? "semua" : "draft";
+
+  const confirmation = String(formData.get("confirmation") ?? "").trim().toUpperCase();
+  if (confirmation !== "HAPUS") {
+    return { error: "Ketik HAPUS pada kotak konfirmasi untuk melanjutkan." };
+  }
+
+  const { start, end } = monthRange(month);
+  const supabase = await createClient();
+
+  let existingQuery = supabase
+    .from("schedule_assignments")
+    .select("id, host_id, status")
+    .gte("work_date", start)
+    .lte("work_date", end);
+
+  if (scope === "draft") existingQuery = existingQuery.eq("status", "draft");
+
+  const { data: existing, error: readError } = await existingQuery;
+  if (readError) return { error: "Gagal membaca jadwal periode ini." };
+
+  const rows = existing ?? [];
+  if (rows.length === 0) {
+    return {
+      error:
+        scope === "draft"
+          ? `Tidak ada draft jadwal di ${monthLabel(month)}.`
+          : `Tidak ada jadwal di ${monthLabel(month)}.`,
+    };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("schedule_assignments")
+    .delete()
+    .in(
+      "id",
+      rows.map((row) => row.id as string),
+    );
+
+  if (deleteError) return { error: "Gagal menghapus jadwal. Coba lagi." };
+
+  const publishedRemoved = rows.filter((row) => row.status === "published");
+
+  // Periode dikembalikan ke draft hanya bila tidak ada lagi jadwal terbit di dalamnya.
+  const { count: sisaPublished } = await supabase
+    .from("schedule_assignments")
+    .select("id", { count: "exact", head: true })
+    .gte("work_date", start)
+    .lte("work_date", end)
+    .eq("status", "published");
+
+  if ((sisaPublished ?? 0) === 0) {
+    await supabase
+      .from("schedule_periods")
+      .update({ status: "draft", published_at: null, published_by: null })
+      .eq("start_date", start)
+      .eq("end_date", end);
+  }
+
+  // Host yang jadwal terbitnya ikut terhapus perlu tahu, karena shift yang
+  // sudah mereka lihat di aplikasi tiba-tiba hilang.
+  if (publishedRemoved.length > 0) {
+    const hostIds = [...new Set(publishedRemoved.map((row) => row.host_id as string))];
+    await notifyUsers({
+      userIds: hostIds,
+      type: "schedule_published",
+      title: "Jadwal ditarik kembali",
+      body: `Jadwal ${monthLabel(month)} sedang disusun ulang admin. Cek lagi setelah terbit.`,
+      link: "/jadwal",
+    });
+  }
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "schedule",
+    action: "delete",
+    before: {
+      period: month,
+      scope,
+      assignments: rows.length,
+      published: publishedRemoved.length,
+    },
+  });
+
+  revalidateSchedule();
+
+  const rincian =
+    publishedRemoved.length > 0
+      ? ` (${publishedRemoved.length} di antaranya sudah terbit)`
+      : "";
+
+  return { success: `${rows.length} penugasan di ${monthLabel(month)} dihapus${rincian}.` };
+}

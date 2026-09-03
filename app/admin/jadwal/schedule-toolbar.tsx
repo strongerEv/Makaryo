@@ -4,6 +4,7 @@ import { Send, Sparkles } from "lucide-react";
 import { useActionState } from "react";
 
 import { generateDraftAction, publishScheduleAction, type ActionState } from "@/app/admin/jadwal/actions";
+import { ResetScheduleDialog } from "@/app/admin/jadwal/reset-schedule-dialog";
 import { Alert } from "@/components/ui/alert";
 import { SubmitButton } from "@/components/ui/submit-button";
 
@@ -34,6 +35,8 @@ export function ScheduleToolbar({ month, draftCount }: { month: string; draftCou
             Publish {draftCount > 0 ? `(${draftCount})` : ""}
           </SubmitButton>
         </form>
+
+        <ResetScheduleDialog defaultMonth={month} />
       </div>
 
       {error ? <Alert tone="error">{error}</Alert> : null}

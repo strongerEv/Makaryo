@@ -58,6 +58,12 @@ export function formatTime(value: string | Date | null | undefined, fallback = "
   return date ? `${timeFormatter.format(date)} WIB` : fallback;
 }
 
+/** Jam tanpa akhiran "WIB" — untuk rentang yang sudah diberi satu penanda saja. */
+export function formatTimeShort(value: string | Date | null | undefined, fallback = "—") {
+  const date = toDate(value);
+  return date ? timeFormatter.format(date) : fallback;
+}
+
 /** Memotong "06:00:00" menjadi "06.00" untuk tampilan jam shift. */
 export function formatClock(value: string | null | undefined, fallback = "—") {
   if (!value) return fallback;

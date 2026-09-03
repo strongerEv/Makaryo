@@ -16,6 +16,7 @@ import { LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL } from "@/lib/types/database";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatDateShort } from "@/lib/utils/datetime";
 import { UserListItem } from "@/app/admin/pengguna/user-list-item";
+import { LiveSync } from "@/lib/realtime/live-sync";
 import { ReviewActions } from "./review-actions";
 import { WeeklyOffWindowForm } from "./weekly-off-window-form";
 
@@ -74,6 +75,8 @@ export default async function ApprovalPage({
 
   return (
     <>
+      <LiveSync tables={["leave_requests", "profiles"]} />
+
       <PageHeader
         title="Approval"
         description="Verifikasi pendaftar baru, serta setujui atau tolak pengajuan izin dan libur."

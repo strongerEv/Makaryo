@@ -11,6 +11,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { signAvatarUrls } from "@/lib/storage/avatar";
 import { createClient } from "@/lib/supabase/server";
 import type { AccountStatus, Profile } from "@/lib/types/database";
+import { LiveSync } from "@/lib/realtime/live-sync";
 import { CreateUserDialog } from "./create-user-dialog";
 import { UserFilterTabs } from "./user-filter-tabs";
 import { UserListItem } from "./user-list-item";
@@ -61,6 +62,8 @@ export default async function AdminUsersPage({
 
   return (
     <>
+      <LiveSync tables={["profiles"]} />
+
       <PageHeader
         title="Kelola Pengguna"
         description="Verifikasi pendaftar, tambah akun baru, dan kelola data karyawan."

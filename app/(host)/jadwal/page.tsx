@@ -13,6 +13,7 @@ import type { Shift } from "@/lib/types/database";
 import { cn } from "@/lib/utils/cn";
 import { formatClock, formatDate, todayInJakarta } from "@/lib/utils/datetime";
 import { addDays, currentMonth, eachDate, monthRange, weekStart } from "@/lib/utils/period";
+import { LiveSync } from "@/lib/realtime/live-sync";
 
 export const metadata: Metadata = { title: "Jadwal" };
 
@@ -71,6 +72,8 @@ export default async function HostSchedulePage({
 
   return (
     <>
+      <LiveSync tables={["schedule_assignments", "leave_requests"]} />
+
       <PageHeader title="Jadwal saya" description="Shift yang sudah dipublish admin." />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

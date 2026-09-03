@@ -16,6 +16,7 @@ import type { Attendance, AttendanceStatus, Profile, Shift } from "@/lib/types/d
 import { formatCurrency } from "@/lib/utils/format";
 import { formatClock, formatDate, formatTime, greeting, todayInJakarta } from "@/lib/utils/datetime";
 import { addDays, eachDate } from "@/lib/utils/period";
+import { LiveSync } from "@/lib/realtime/live-sync";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -138,6 +139,8 @@ export default async function AdminDashboardPage() {
 
   return (
     <>
+      <LiveSync tables={["attendances", "schedule_assignments", "revenue_reports", "leave_requests", "profiles"]} />
+
       <PageHeader
         title={`${greeting()}, ${admin.full_name.split(" ")[0]}`}
         description={formatDate(today)}

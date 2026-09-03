@@ -17,6 +17,7 @@ import type { Profile, Shift } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils/format";
 import { todayInJakarta } from "@/lib/utils/datetime";
 import { currentMonth, eachDate, monthRange, recentMonths } from "@/lib/utils/period";
+import { LiveSync } from "@/lib/realtime/live-sync";
 
 export const metadata: Metadata = { title: "Omzet" };
 
@@ -75,6 +76,8 @@ export default async function AdminRevenuePage({
 
   return (
     <>
+      <LiveSync tables={["revenue_reports"]} />
+
       <PageHeader title="Omzet" description="Rekap laporan omzet seluruh host." />
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -10,6 +10,7 @@ import { requireActiveProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { AppNotification } from "@/lib/types/database";
 import { formatDateTime } from "@/lib/utils/datetime";
+import { LiveSync } from "@/lib/realtime/live-sync";
 import { MarkAllReadButton, NotificationLink } from "./notification-items";
 
 export const metadata: Metadata = { title: "Notifikasi" };
@@ -36,6 +37,8 @@ export default async function NotificationsPage() {
       variant={isAdmin ? "admin" : "host"}
       profileHref={isAdmin ? "/admin/pengguna" : "/profil"}
     >
+      <LiveSync tables={["notifications"]} />
+
       <PageHeader
         title="Notifikasi"
         description={unread > 0 ? `${unread} notifikasi belum dibaca.` : "Semua notifikasi sudah dibaca."}

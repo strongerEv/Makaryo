@@ -14,6 +14,7 @@ import type { AppSettings, LeaveRequest } from "@/lib/types/database";
 import { LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL } from "@/lib/types/database";
 import { formatDate, formatDateShort, todayInJakarta } from "@/lib/utils/datetime";
 import { eachDate, monthLabel, monthRange } from "@/lib/utils/period";
+import { LiveSync } from "@/lib/realtime/live-sync";
 import { LeaveRequestForms } from "./leave-request-forms";
 import { CancelRequestButton } from "./cancel-request-button";
 
@@ -61,6 +62,8 @@ export default async function LeaveRequestPage() {
 
   return (
     <>
+      <LiveSync tables={["leave_requests"]} />
+
       <PageHeader
         title="Pengajuan"
         description="Ajukan jatah libur mingguan dan izin mendadak di sini."

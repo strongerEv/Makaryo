@@ -15,6 +15,7 @@ import type { LeaveType, Profile, SchedulePeriod, Shift } from "@/lib/types/data
 import { cn } from "@/lib/utils/cn";
 import { formatDate, todayInJakarta } from "@/lib/utils/datetime";
 import { addDays, currentMonth, eachDate, monthRange, weekStart } from "@/lib/utils/period";
+import { LiveSync } from "@/lib/realtime/live-sync";
 import { DayEditor } from "./day-editor";
 import { ScheduleToolbar } from "./schedule-toolbar";
 
@@ -148,6 +149,8 @@ export default async function AdminSchedulePage({
 
   return (
     <>
+      <LiveSync tables={["schedule_assignments", "leave_requests"]} />
+
       <PageHeader
         title="Jadwal"
         description="Susun jadwal seluruh host, lalu publish agar terlihat oleh mereka."

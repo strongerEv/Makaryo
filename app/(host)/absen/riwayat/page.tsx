@@ -2,18 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, CalendarX2, Clock3, ScanFace, Timer } from "lucide-react";
 
+import { AttendanceHistoryList } from "@/components/attendance/attendance-history-list";
 import { PageHeader } from "@/components/layout/page-header";
-import { AttendanceStatusBadge } from "@/components/ui/attendance-badge";
 import { Card } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
 import { MonthFilterForm } from "@/components/ui/month-filter-form";
+import { toAttendanceDetail } from "@/lib/attendance/detail";
 import { formatDuration } from "@/lib/attendance/status";
 import { requireHost } from "@/lib/auth/session";
+import { LiveSync } from "@/lib/realtime/live-sync";
 import { signPhotoUrls } from "@/lib/storage/photos";
 import { createClient } from "@/lib/supabase/server";
 import type { Attendance } from "@/lib/types/database";
-import { formatDate, formatTime } from "@/lib/utils/datetime";
 import { currentMonth, monthRange } from "@/lib/utils/period";
 
 export const metadata: Metadata = { title: "Riwayat Absensi" };
@@ -40,7 +40,11 @@ export default async function AttendanceHistoryPage({
   const photos = await signPhotoUrls(
     supabase,
     "attendance",
-    attendances.map((item) => item.clock_in_photo),
+    attendances.flatMap((item) => [item.clock_in_photo, item.clock_out_photo]),
+  );
+
+  const details = attendances.map((attendance) =>
+    toAttendanceDetail({ attendance, hostName: profile.full_name, photos }),
   );
 
   const totalMinutes = attendances.reduce((sum, item) => sum + item.worked_minutes, 0);
@@ -50,6 +54,8 @@ export default async function AttendanceHistoryPage({
 
   return (
     <>
+      <LiveSync tables={["attendances"]} />
+
       <Link
         href="/absen"
         className="mb-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-muted hover:text-ink"
@@ -58,7 +64,10 @@ export default async function AttendanceHistoryPage({
         Kembali ke absen
       </Link>
 
-      <PageHeader title="Riwayat absensi" description="Rekap kehadiranmu per bulan." />
+      <PageHeader
+        title="Riwayat absensi"
+        description="Rekap kehadiranmu per bulan. Ketuk salah satu baris untuk melihat foto dan lokasinya."
+      />
 
       <MonthFilterForm action="/absen/riwayat" value={bulan} className="mb-4" />
 
@@ -70,43 +79,7 @@ export default async function AttendanceHistoryPage({
       </div>
 
       <Card className="p-0">
-        {attendances.length === 0 ? (
-          <EmptyState
-            icon={CalendarX2}
-            title="Belum ada absensi bulan ini"
-            description="Catatan absensi akan muncul di sini setelah kamu clock in."
-          />
-        ) : (
-          <ul className="divide-y divide-line">
-            {attendances.map((item) => (
-              <li key={item.id} className="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-                {item.clock_in_photo && photos[item.clock_in_photo] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photos[item.clock_in_photo]}
-                    alt=""
-                    className="size-12 shrink-0 rounded-[14px] object-cover"
-                  />
-                ) : (
-                  <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-surface-muted text-ink-muted">
-                    <ScanFace className="size-5" aria-hidden />
-                  </span>
-                )}
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{formatDate(item.work_date)}</p>
-                  <p className="tabular text-[12px] text-ink-muted">
-                    {formatTime(item.clock_in_at)} → {item.clock_out_at ? formatTime(item.clock_out_at) : "belum"}
-                    {item.worked_minutes > 0 ? ` · ${formatDuration(item.worked_minutes)}` : ""}
-                    {item.auto_closed ? " · ditutup otomatis" : ""}
-                  </p>
-                </div>
-
-                <AttendanceStatusBadge status={item.status} lateMinutes={item.late_minutes} />
-              </li>
-            ))}
-          </ul>
-        )}
+        <AttendanceHistoryList items={details} />
       </Card>
     </>
   );

@@ -1,11 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { CalendarX2, LogIn, LogOut } from "lucide-react";
+import { CalendarX2, ChevronRight, LogIn, LogOut } from "lucide-react";
 import { useState } from "react";
 
 import { clockInAction, clockOutAction } from "@/app/(host)/absen/actions";
 import { CameraCapture, type CapturePayload } from "@/components/attendance/camera-capture";
+import { AttendanceDetailSheet, type AttendanceDetail } from "@/components/attendance/attendance-detail-sheet";
 import { Alert } from "@/components/ui/alert";
 import { AttendanceStatusBadge } from "@/components/ui/attendance-badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ export type TodayShift = {
   startTime: string;
   endTime: string;
   attendance: Attendance | null;
+  /** Sudah berisi signed URL foto; null bila belum ada absensi. */
+  detail: AttendanceDetail | null;
 };
 
 type CaptureTarget =
@@ -30,13 +33,16 @@ type CaptureTarget =
 export function AttendancePanel({
   shifts,
   unscheduled,
+  unscheduledDetail,
 }: {
   shifts: TodayShift[];
   unscheduled: Attendance | null;
+  unscheduledDetail: AttendanceDetail | null;
 }) {
   const router = useRouter();
   const [target, setTarget] = useState<CaptureTarget | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [preview, setPreview] = useState<AttendanceDetail | null>(null);
 
   const handleSubmit = async ({ photo, latitude, longitude }: CapturePayload) => {
     if (!target) return { error: "Aksi tidak dikenal." };
@@ -83,6 +89,7 @@ export function AttendancePanel({
             <ShiftAttendanceCard
               key={shift.assignmentId}
               shift={shift}
+              onPreview={shift.detail ? () => setPreview(shift.detail) : undefined}
               onClockIn={() =>
                 setTarget({ kind: "in", assignmentId: shift.assignmentId, label: shift.shiftName })
               }
@@ -101,7 +108,10 @@ export function AttendancePanel({
 
           {unscheduled ? (
             <div className="mt-3 space-y-2">
-              <AttendanceTimeline attendance={unscheduled} />
+              <AttendanceTimeline
+                attendance={unscheduled}
+                onPreview={unscheduledDetail ? () => setPreview(unscheduledDetail) : undefined}
+              />
               {!unscheduled.clock_out_at ? (
                 <Button
                   variant="outline"
@@ -129,6 +139,12 @@ export function AttendancePanel({
         </Card>
       </div>
 
+      <AttendanceDetailSheet
+        detail={preview}
+        open={preview !== null}
+        onClose={() => setPreview(null)}
+      />
+
       <CameraCapture
         open={target !== null}
         title={target?.kind === "out" ? `Clock out — ${target.label}` : `Clock in — ${target?.label ?? ""}`}
@@ -143,10 +159,12 @@ export function AttendancePanel({
 
 function ShiftAttendanceCard({
   shift,
+  onPreview,
   onClockIn,
   onClockOut,
 }: {
   shift: TodayShift;
+  onPreview?: () => void;
   onClockIn: () => void;
   onClockOut: (attendanceId: string) => void;
 }) {
@@ -164,7 +182,9 @@ function ShiftAttendanceCard({
         {attendance ? <AttendanceStatusBadge status={attendance.status} lateMinutes={attendance.late_minutes} /> : null}
       </div>
 
-      {attendance ? <AttendanceTimeline attendance={attendance} className="mt-4" /> : null}
+      {attendance ? (
+        <AttendanceTimeline attendance={attendance} className="mt-4" onPreview={onPreview} />
+      ) : null}
 
       <div className="mt-4">
         {!attendance ? (
@@ -187,19 +207,49 @@ function ShiftAttendanceCard({
   );
 }
 
-function AttendanceTimeline({ attendance, className }: { attendance: Attendance; className?: string }) {
+/**
+ * Ringkasan jam absen. Bila `onPreview` diberikan, seluruh kotaknya jadi tombol
+ * yang membuka pratinjau berisi foto dan lokasi.
+ */
+function AttendanceTimeline({
+  attendance,
+  className,
+  onPreview,
+}: {
+  attendance: Attendance;
+  className?: string;
+  onPreview?: () => void;
+}) {
+  const isi = (
+    <>
+      <span className="grid flex-1 grid-cols-2 gap-3 text-left">
+        <span>
+          <span className="block text-[11px] font-semibold text-ink-muted">Clock in</span>
+          <span className="tabular block text-sm font-bold text-ink">{formatTime(attendance.clock_in_at)}</span>
+        </span>
+        <span>
+          <span className="block text-[11px] font-semibold text-ink-muted">Clock out</span>
+          <span className="tabular block text-sm font-bold text-ink">
+            {attendance.clock_out_at ? formatTime(attendance.clock_out_at) : "Belum"}
+          </span>
+        </span>
+      </span>
+      {onPreview ? (
+        <span className="inline-flex items-center gap-1 self-center text-[12px] font-semibold text-primary">
+          Detail
+          <ChevronRight className="size-3.5" aria-hidden />
+        </span>
+      ) : null}
+    </>
+  );
+
+  const kelas = `flex w-full items-center gap-3 rounded-[var(--radius-md)] bg-surface-muted px-4 py-3 ${className ?? ""}`;
+
+  if (!onPreview) return <div className={kelas}>{isi}</div>;
+
   return (
-    <dl className={`grid grid-cols-2 gap-3 rounded-[var(--radius-md)] bg-surface-muted px-4 py-3 ${className ?? ""}`}>
-      <div>
-        <dt className="text-[11px] font-semibold text-ink-muted">Clock in</dt>
-        <dd className="tabular text-sm font-bold text-ink">{formatTime(attendance.clock_in_at)}</dd>
-      </div>
-      <div>
-        <dt className="text-[11px] font-semibold text-ink-muted">Clock out</dt>
-        <dd className="tabular text-sm font-bold text-ink">
-          {attendance.clock_out_at ? formatTime(attendance.clock_out_at) : "Belum"}
-        </dd>
-      </div>
-    </dl>
+    <button type="button" onClick={onPreview} className={`${kelas} text-left transition-colors hover:bg-primary-soft`}>
+      {isi}
+    </button>
   );
 }

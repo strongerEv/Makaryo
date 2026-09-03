@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Attendance, Shift } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatClock, formatTime, greeting, todayInJakarta } from "@/lib/utils/datetime";
+import { LiveSync } from "@/lib/realtime/live-sync";
 
 export const metadata: Metadata = { title: "Beranda" };
 
@@ -45,6 +46,8 @@ export default async function HostHomePage() {
 
   return (
     <>
+      <LiveSync tables={["attendances", "schedule_assignments", "revenue_reports", "leave_requests"]} />
+
       <header className="mb-5">
         <p className="text-[13px] font-medium text-ink-muted">{greeting()},</p>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">{profile.full_name}!</h1>
