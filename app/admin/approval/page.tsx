@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle2, Inbox, XCircle } from "lucide-react";
+import { CheckCircle2, Inbox, UserRoundCheck, XCircle } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar } from "@/components/ui/avatar";
@@ -15,6 +15,7 @@ import type { AppSettings, LeaveRequest, LeaveStatus, Profile } from "@/lib/type
 import { LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL } from "@/lib/types/database";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, formatDateShort } from "@/lib/utils/datetime";
+import { UserListItem } from "@/app/admin/pengguna/user-list-item";
 import { ReviewActions } from "./review-actions";
 import { WeeklyOffWindowForm } from "./weekly-off-window-form";
 
@@ -37,7 +38,14 @@ export default async function ApprovalPage({
   const { status = "pending" } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: rows }, { data: settingsRow }, { count: pendingCount }, { count: approvedCount }, { count: rejectedCount }] =
+  const [
+    { data: rows },
+    { data: settingsRow },
+    { data: pendingProfileRows },
+    { count: pendingCount },
+    { count: approvedCount },
+    { count: rejectedCount },
+  ] =
     await Promise.all([
       supabase
         .from("leave_requests")
@@ -45,6 +53,11 @@ export default async function ApprovalPage({
         .eq("status", status)
         .order("requested_date", { ascending: true }),
       supabase.from("app_settings").select("*").eq("id", 1).single(),
+      supabase
+        .from("profiles")
+        .select("*")
+        .eq("account_status", "pending")
+        .order("created_at", { ascending: true }),
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("status", "rejected"),
@@ -52,23 +65,73 @@ export default async function ApprovalPage({
 
   const requests = (rows ?? []) as unknown as Row[];
   const settings = settingsRow as AppSettings | null;
-  const avatars = await signAvatarUrls(
-    supabase,
-    requests.map((row) => row.profiles?.avatar_url ?? null),
-  );
+  const pendingProfiles = (pendingProfileRows ?? []) as Profile[];
+
+  const avatars = await signAvatarUrls(supabase, [
+    ...requests.map((row) => row.profiles?.avatar_url ?? null),
+    ...pendingProfiles.map((profile) => profile.avatar_url),
+  ]);
 
   return (
     <>
       <PageHeader
         title="Approval"
-        description="Setujui atau tolak pengajuan izin dan libur dari host."
+        description="Verifikasi pendaftar baru, serta setujui atau tolak pengajuan izin dan libur."
       />
 
-      <div className="mb-5 grid grid-cols-3 gap-3">
-        <StatCard label="Menunggu" value={pendingCount ?? 0} icon={Inbox} tone="amber" />
-        <StatCard label="Disetujui" value={approvedCount ?? 0} icon={CheckCircle2} tone="emerald" />
-        <StatCard label="Ditolak" value={rejectedCount ?? 0} icon={XCircle} tone="coral" />
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label="Pendaftar baru"
+          value={pendingProfiles.length}
+          icon={UserRoundCheck}
+          tone={pendingProfiles.length > 0 ? "primary" : "neutral"}
+        />
+        <StatCard label="Izin menunggu" value={pendingCount ?? 0} icon={Inbox} tone="amber" />
+        <StatCard label="Izin disetujui" value={approvedCount ?? 0} icon={CheckCircle2} tone="emerald" />
+        <StatCard label="Izin ditolak" value={rejectedCount ?? 0} icon={XCircle} tone="coral" />
       </div>
+
+      {/*
+        Pendaftar baru ditampilkan di sini, bukan hanya di Kelola Pengguna:
+        halaman ini yang dicari admin ketika ada anggota baru ingin bergabung.
+      */}
+      <Card className="mb-4 p-0">
+        <div className="p-5">
+          <CardHeader
+            className="mb-0"
+            title="Pendaftar menunggu verifikasi"
+            description="Calon host yang mendaftar sendiri. Setujui agar akunnya langsung bisa dipakai."
+            action={
+              <Link
+                href="/admin/pengguna"
+                className="text-[13px] font-semibold text-primary hover:underline"
+              >
+                Kelola pengguna
+              </Link>
+            }
+          />
+        </div>
+
+        {pendingProfiles.length === 0 ? (
+          <EmptyState
+            icon={UserRoundCheck}
+            title="Tidak ada pendaftar baru"
+            description="Pendaftar yang mengisi halaman daftar akan muncul di sini untuk kamu setujui."
+          />
+        ) : (
+          <ul className="divide-y divide-line">
+            {pendingProfiles.map((profile) => (
+              <li key={profile.id}>
+                <UserListItem
+                  user={profile}
+                  avatarUrl={profile.avatar_url ? (avatars[profile.avatar_url] ?? null) : null}
+                  isSelf={false}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card className="p-0">
