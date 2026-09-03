@@ -1,17 +1,15 @@
 "use client";
 
 import { Eraser } from "lucide-react";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { resetScheduleAction, type ActionState } from "@/app/admin/jadwal/actions";
+import { type ActionState } from "@/app/admin/jadwal/actions";
 import { Alert } from "@/components/ui/alert";
 import { buttonClass } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { recentMonths } from "@/lib/utils/period";
-
-const INITIAL: ActionState = {};
+import { monthOptions } from "@/lib/utils/period";
 
 const SCOPES = [
   {
@@ -26,17 +24,32 @@ const SCOPES = [
   },
 ] as const;
 
-/** Membongkar jadwal satu bulan supaya bisa disusun ulang dari nol. */
-export function ResetScheduleDialog({ defaultMonth }: { defaultMonth: string }) {
+/**
+ * Membongkar jadwal satu bulan supaya bisa disusun ulang dari nol.
+ *
+ * Status aksinya dipegang toolbar, supaya pesan hasilnya muncul di area yang
+ * sama dengan generate dan publish — bukan terjepit di sebelah tombol.
+ */
+export function ResetScheduleDialog({
+  defaultMonth,
+  state,
+  formAction,
+}: {
+  defaultMonth: string;
+  state: ActionState;
+  formAction: (formData: FormData) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<"draft" | "semua">("draft");
-  const [state, formAction] = useActionState(resetScheduleAction, INITIAL);
 
   useEffect(() => {
     if (state.success) setOpen(false);
   }, [state.success]);
 
-  const months = recentMonths();
+  // Jadwal biasanya disusun untuk bulan depan, jadi daftarnya harus melihat ke
+  // depan juga — dan bulan yang sedang dibuka wajib ada supaya reset tidak
+  // diam-diam mengenai bulan lain.
+  const months = monthOptions({ back: 12, forward: 3, include: defaultMonth });
 
   return (
     <>
@@ -49,11 +62,6 @@ export function ResetScheduleDialog({ defaultMonth }: { defaultMonth: string }) 
         Reset jadwal
       </button>
 
-      {state.success ? (
-        <Alert tone="success" className="mt-2">
-          {state.success}
-        </Alert>
-      ) : null}
 
       <Modal
         open={open}

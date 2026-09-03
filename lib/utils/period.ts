@@ -38,6 +38,36 @@ export function recentMonths(count = 12) {
   return months;
 }
 
+/**
+ * Pilihan bulan untuk penyaring atau formulir.
+ *
+ * `recentMonths` hanya melihat ke belakang, padahal jadwal biasanya disusun
+ * untuk bulan depan. Fungsi ini bisa memuat bulan mendatang, dan `include`
+ * memastikan bulan yang sedang dibuka selalu ada di daftar walau berada di
+ * luar rentang — tanpa itu, `select` diam-diam jatuh ke pilihan pertama dan
+ * aksinya mengenai bulan yang salah.
+ */
+export function monthOptions({
+  back = 12,
+  forward = 0,
+  include,
+}: { back?: number; forward?: number; include?: string } = {}) {
+  const [year, month] = currentMonth().split("-").map(Number);
+  const values: string[] = [];
+
+  for (let index = forward; index >= -back; index -= 1) {
+    const date = new Date(Date.UTC(year, month - 1 + index, 1));
+    values.push(`${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+
+  if (include && /^\d{4}-\d{2}$/.test(include) && !values.includes(include)) {
+    values.push(include);
+    values.sort().reverse();
+  }
+
+  return values.map((value) => ({ value, label: monthLabel(value) }));
+}
+
 export function monthLabel(month: string) {
   const { start } = monthRange(month);
   return new Intl.DateTimeFormat("id-ID", { timeZone: "UTC", month: "long", year: "numeric" }).format(

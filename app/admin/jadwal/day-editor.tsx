@@ -1,13 +1,21 @@
 "use client";
 
-import { UserMinus, UserPlus } from "lucide-react";
-import { useActionState } from "react";
+import { ArrowRightLeft, CheckSquare, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 
-import { assignHostAction, removeAssignmentAction, type ActionState } from "@/app/admin/jadwal/actions";
+import {
+  assignHostAction,
+  moveAssignmentAction,
+  removeAssignmentAction,
+  removeAssignmentsAction,
+  type ActionState,
+} from "@/app/admin/jadwal/actions";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { buttonClass } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Select } from "@/components/ui/field";
+import { Field, Select } from "@/components/ui/field";
+import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { Profile, Shift } from "@/lib/types/database";
 import { formatClock, formatDate } from "@/lib/utils/datetime";
@@ -36,17 +44,111 @@ export function DayEditor({
 }) {
   const [assignState, assign] = useActionState(assignHostAction, INITIAL);
   const [removeState, remove] = useActionState(removeAssignmentAction, INITIAL);
+  const [bulkState, removeMany] = useActionState(removeAssignmentsAction, INITIAL);
+  const [moveState, move] = useActionState(moveAssignmentAction, INITIAL);
 
-  const error = assignState.error ?? removeState.error;
+  const [menandai, setMenandai] = useState(false);
+  const [terpilih, setTerpilih] = useState<string[]>([]);
+  const [dipindah, setDipindah] = useState<DayAssignment | null>(null);
+
+  const error = assignState.error ?? removeState.error ?? bulkState.error ?? moveState.error;
+  const success = bulkState.success ?? moveState.success;
+
+  const idHariIni = useMemo(() => assignments.map((item) => item.id), [assignments]);
+
+  // Setelah penghapusan, id yang sudah hilang tidak boleh tersisa di pilihan.
+  useEffect(() => {
+    setTerpilih((sebelum) => sebelum.filter((id) => idHariIni.includes(id)));
+  }, [idHariIni]);
+
+  useEffect(() => {
+    if (bulkState.success) {
+      setTerpilih([]);
+      setMenandai(false);
+    }
+  }, [bulkState.success]);
+
+  useEffect(() => {
+    if (moveState.success) setDipindah(null);
+  }, [moveState.success]);
+
+  const toggle = (id: string) =>
+    setTerpilih((sebelum) =>
+      sebelum.includes(id) ? sebelum.filter((item) => item !== id) : [...sebelum, id],
+    );
+
+  const semuaTerpilih = idHariIni.length > 0 && terpilih.length === idHariIni.length;
+
+  const keluarModeTandai = () => {
+    setMenandai(false);
+    setTerpilih([]);
+  };
 
   return (
     <Card className="self-start">
-      <CardHeader title={formatDate(date)} description="Tambah atau keluarkan host dari shift hari ini." />
+      <CardHeader
+        title={formatDate(date)}
+        description="Tambah, pindahkan, atau keluarkan host dari shift hari ini."
+        action={
+          assignments.length > 0 ? (
+            menandai ? (
+              <button
+                type="button"
+                onClick={keluarModeTandai}
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-muted hover:text-ink"
+              >
+                <X className="size-4" aria-hidden />
+                Selesai
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setMenandai(true)}
+                className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-primary hover:underline"
+              >
+                <CheckSquare className="size-4" aria-hidden />
+                Tandai
+              </button>
+            )
+          ) : undefined
+        }
+      />
 
       {error ? (
         <Alert tone="error" className="mb-3">
           {error}
         </Alert>
+      ) : null}
+      {success ? (
+        <Alert tone="success" className="mb-3">
+          {success}
+        </Alert>
+      ) : null}
+
+      {menandai ? (
+        <form action={removeMany} className="mb-3 rounded-[var(--radius-md)] bg-surface-muted p-3">
+          {terpilih.map((id) => (
+            <input key={id} type="hidden" name="assignmentIds" value={id} />
+          ))}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setTerpilih(semuaTerpilih ? [] : idHariIni)}
+              className="text-[13px] font-semibold text-primary hover:underline"
+            >
+              {semuaTerpilih ? "Kosongkan pilihan" : `Pilih semua (${idHariIni.length})`}
+            </button>
+
+            <span className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold text-ink">{terpilih.length} ditandai</span>
+              <SubmitButton size="sm" variant="danger" disabled={terpilih.length === 0} pendingLabel="Menghapus…">
+                <Trash2 className="size-4" aria-hidden />
+                Hapus
+              </SubmitButton>
+            </span>
+          </div>
+        </form>
       ) : null}
 
       {shifts.length === 0 ? (
@@ -79,22 +181,46 @@ export function DayEditor({
                     {assigned.map((item) => (
                       <li
                         key={item.id}
-                        className="flex items-center justify-between gap-2 rounded-[12px] bg-surface-muted px-3 py-2"
+                        className={`flex items-center gap-2 rounded-[12px] px-3 py-2 transition-colors ${
+                          menandai && terpilih.includes(item.id) ? "bg-primary-soft" : "bg-surface-muted"
+                        }`}
                       >
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13px] font-semibold text-ink">{item.hostName}</span>
-                          <span className="text-[11px] text-ink-muted">
-                            {item.status === "published" ? "Terpublish" : "Draft"} ·{" "}
-                            {item.source === "auto" ? "otomatis" : "manual"}
-                          </span>
-                        </span>
-                        <form action={remove}>
-                          <input type="hidden" name="assignmentId" value={item.id} />
-                          <SubmitButton size="sm" variant="ghost" pendingLabel="…">
-                            <UserMinus className="size-4" aria-hidden />
-                            <span className="sr-only">Keluarkan {item.hostName}</span>
-                          </SubmitButton>
-                        </form>
+                        {menandai ? (
+                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={terpilih.includes(item.id)}
+                              onChange={() => toggle(item.id)}
+                              className="size-4 shrink-0 accent-[var(--color-primary)]"
+                              aria-label={`Tandai ${item.hostName}`}
+                            />
+                            <AssignmentLabel item={item} />
+                          </label>
+                        ) : (
+                          <>
+                            <span className="min-w-0 flex-1">
+                              <AssignmentLabel item={item} />
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() => setDipindah(item)}
+                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-primary"
+                              title="Pindahkan ke shift lain"
+                            >
+                              <ArrowRightLeft className="size-4" aria-hidden />
+                              <span className="sr-only">Pindahkan {item.hostName}</span>
+                            </button>
+
+                            <form action={remove}>
+                              <input type="hidden" name="assignmentId" value={item.id} />
+                              <SubmitButton size="sm" variant="ghost" pendingLabel="…">
+                                <UserMinus className="size-4" aria-hidden />
+                                <span className="sr-only">Keluarkan {item.hostName}</span>
+                              </SubmitButton>
+                            </form>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -125,6 +251,59 @@ export function DayEditor({
           })}
         </div>
       )}
+
+      <Modal
+        open={dipindah !== null}
+        onClose={() => setDipindah(null)}
+        title="Pindahkan penugasan"
+        description={dipindah ? `${dipindah.hostName} · ${formatDate(date)}` : undefined}
+      >
+        {dipindah ? (
+          <form action={move} className="space-y-4">
+            <input type="hidden" name="assignmentId" value={dipindah.id} />
+
+            <Field label="Pindah ke shift" htmlFor="pindah-shift" required>
+              <Select
+                id="pindah-shift"
+                name="shiftId"
+                defaultValue={shifts.find((shift) => shift.id !== dipindah.shiftId)?.id ?? ""}
+                required
+              >
+                {shifts
+                  .filter((shift) => shift.id !== dipindah.shiftId)
+                  .map((shift) => (
+                    <option key={shift.id} value={shift.id}>
+                      {shift.name} · {formatClock(shift.start_time)}–{formatClock(shift.end_time)}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDipindah(null)}
+                className={buttonClass({ variant: "ghost" })}
+              >
+                Batal
+              </button>
+              <SubmitButton pendingLabel="Memindahkan…">Pindahkan</SubmitButton>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
     </Card>
+  );
+}
+
+function AssignmentLabel({ item }: { item: DayAssignment }) {
+  return (
+    <span className="min-w-0">
+      <span className="block truncate text-[13px] font-semibold text-ink">{item.hostName}</span>
+      <span className="block text-[11px] text-ink-muted">
+        {item.status === "published" ? "Terpublish" : "Draft"} ·{" "}
+        {item.source === "auto" ? "otomatis" : "manual"}
+      </span>
+    </span>
   );
 }

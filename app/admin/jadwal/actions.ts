@@ -348,12 +348,28 @@ export async function resetScheduleAction(_prev: ActionState, formData: FormData
 
   const rows = existing ?? [];
   if (rows.length === 0) {
-    return {
-      error:
-        scope === "draft"
-          ? `Tidak ada draft jadwal di ${monthLabel(month)}.`
-          : `Tidak ada jadwal di ${monthLabel(month)}.`,
-    };
+    if (scope === "draft") {
+      // Bedakan "memang kosong" dari "semuanya sudah terbit", supaya admin tahu
+      // cukup mengganti cakupan alih-alih mengira fiturnya rusak.
+      const { count: terbit } = await supabase
+        .from("schedule_assignments")
+        .select("id", { count: "exact", head: true })
+        .gte("work_date", start)
+        .lte("work_date", end)
+        .eq("status", "published");
+
+      if ((terbit ?? 0) > 0) {
+        return {
+          error:
+            `Tidak ada draft di ${monthLabel(month)} — ${terbit} penugasan di bulan itu sudah terbit. ` +
+            'Pilih cakupan "Semua jadwal" bila memang mau menghapusnya.',
+        };
+      }
+
+      return { error: `Tidak ada jadwal sama sekali di ${monthLabel(month)}.` };
+    }
+
+    return { error: `Tidak ada jadwal di ${monthLabel(month)}.` };
   }
 
   const { error: deleteError } = await supabase
@@ -417,4 +433,143 @@ export async function resetScheduleAction(_prev: ActionState, formData: FormData
       : "";
 
   return { success: `${rows.length} penugasan di ${monthLabel(month)} dihapus${rincian}.` };
+}
+
+/**
+ * Menghapus beberapa penugasan sekaligus dari satu hari.
+ *
+ * Dipakai oleh mode tandai di editor harian: admin mencentang beberapa nama
+ * lalu menghapusnya dalam satu langkah, jauh lebih cepat daripada satu per satu.
+ */
+export async function removeAssignmentsAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const ids = formData
+    .getAll("assignmentIds")
+    .map((value) => String(value))
+    .filter(Boolean);
+
+  if (ids.length === 0) return { error: "Tandai dulu penugasan yang mau dihapus." };
+
+  const supabase = await createClient();
+  const { data: before, error: readError } = await supabase
+    .from("schedule_assignments")
+    .select("id, host_id, work_date, shift_id, status")
+    .in("id", ids);
+
+  if (readError) return { error: "Gagal membaca penugasan yang ditandai." };
+
+  const rows = before ?? [];
+  if (rows.length === 0) return { error: "Penugasan tidak ditemukan — mungkin sudah dihapus." };
+
+  const { error } = await supabase
+    .from("schedule_assignments")
+    .delete()
+    .in(
+      "id",
+      rows.map((row) => row.id as string),
+    );
+
+  if (error) return { error: "Gagal menghapus penugasan." };
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "schedule",
+    action: "delete",
+    before: {
+      assignments: rows.length,
+      work_dates: [...new Set(rows.map((row) => row.work_date as string))],
+      published: rows.filter((row) => row.status === "published").length,
+    },
+  });
+
+  // Host yang jadwal terbitnya dicabut perlu tahu, karena shift itu sudah
+  // muncul di aplikasi mereka.
+  const publishedHosts = [
+    ...new Set(rows.filter((row) => row.status === "published").map((row) => row.host_id as string)),
+  ];
+
+  if (publishedHosts.length > 0) {
+    await notifyUsers({
+      userIds: publishedHosts,
+      type: "schedule_published",
+      title: "Jadwal kamu berubah",
+      body: "Ada shift yang dicabut admin. Cek jadwal terbarumu.",
+      link: "/jadwal",
+    });
+  }
+
+  revalidateSchedule();
+  return { success: `${rows.length} penugasan dihapus.` };
+}
+
+/**
+ * Memindahkan satu penugasan ke shift lain di hari yang sama.
+ *
+ * Ini bentuk "edit" yang paling sering dibutuhkan: hostnya benar, shiftnya yang
+ * keliru. Pemeriksaan bentrok jamnya sama dengan saat menambah host baru.
+ */
+export async function moveAssignmentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const assignmentId = String(formData.get("assignmentId") ?? "");
+  const shiftId = String(formData.get("shiftId") ?? "");
+  if (!assignmentId || !shiftId) return { error: "Pilih shift tujuan terlebih dahulu." };
+
+  const supabase = await createClient();
+
+  const { data: current } = await supabase
+    .from("schedule_assignments")
+    .select("id, host_id, work_date, shift_id, status")
+    .eq("id", assignmentId)
+    .single();
+
+  if (!current) return { error: "Penugasan tidak ditemukan." };
+  if (current.shift_id === shiftId) return { error: "Penugasan sudah berada di shift itu." };
+
+  const { data: shift } = await supabase.from("shifts").select("*").eq("id", shiftId).single();
+  if (!shift) return { error: "Shift tujuan tidak ditemukan." };
+
+  const workDate = current.work_date as string;
+
+  const { data: sameDay } = await supabase
+    .from("schedule_assignments")
+    .select("id, work_date, shifts(name, start_time, end_time)")
+    .eq("host_id", current.host_id as string)
+    .eq("work_date", workDate)
+    .neq("id", assignmentId);
+
+  const conflict = (sameDay ?? []).find((row) => {
+    const other = row.shifts as unknown as Pick<Shift, "name" | "start_time" | "end_time"> | null;
+    if (!other) return false;
+    return overlaps(
+      { workDate, startTime: (shift as Shift).start_time, endTime: (shift as Shift).end_time },
+      { workDate: row.work_date as string, startTime: other.start_time, endTime: other.end_time },
+    );
+  });
+
+  if (conflict) {
+    const other = conflict.shifts as unknown as { name: string };
+    return { error: `Host ini sudah dijadwalkan di ${other.name} pada jam yang bertumpuk.` };
+  }
+
+  const { error } = await supabase
+    .from("schedule_assignments")
+    .update({ shift_id: shiftId, source: "manual" })
+    .eq("id", assignmentId);
+
+  if (error) return { error: "Gagal memindahkan penugasan." };
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "schedule",
+    action: "update",
+    entityId: assignmentId,
+    targetUserId: current.host_id as string,
+    before: { shift_id: current.shift_id, work_date: workDate },
+    after: { shift_id: shiftId, work_date: workDate },
+  });
+
+  revalidateSchedule();
+  return { success: `Penugasan dipindah ke ${(shift as Shift).name}.` };
 }
