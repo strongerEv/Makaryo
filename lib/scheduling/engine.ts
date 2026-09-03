@@ -1,4 +1,5 @@
 import { shiftEndInstant, shiftStartInstant } from "@/lib/attendance/time";
+import { planRestDays } from "@/lib/scheduling/rest-days";
 import { eachDate, weekStart } from "@/lib/utils/period";
 
 export type SchedulingHost = {
@@ -78,6 +79,15 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
 
   const leaveKeys = new Set((input.approvedLeaves ?? []).map((leave) => `${leave.hostId}|${leave.date}`));
 
+  // Hari libur ditentukan lebih dulu dan disebar merata, bukan dibiarkan
+  // muncul sebagai sisa pengisian shift yang gampang menumpuk berurutan.
+  const restPlan = planRestDays({
+    startDate: input.startDate,
+    endDate: input.endDate,
+    hosts,
+    approvedLeaveKeys: leaveKeys,
+  });
+
   const totalLoad: Record<string, number> = {};
   const weeklyDays: Record<string, Set<string>> = {};
   const intervals: Record<string, Interval[]> = {};
@@ -123,7 +133,9 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
       }
 
       const candidates = hosts
-        .filter((host) => isEligible(host, { workDate, week, shift, leaveKeys, weeklyDays, intervals }))
+        .filter((host) =>
+          isEligible(host, { workDate, week, shift, leaveKeys, restKeys: restPlan.keys, weeklyDays, intervals }),
+        )
         .sort((a, b) => compareCandidates(a, b, { workDate, shift, totalLoad, weeklyDays, week, intervals }));
 
       const picked = candidates.slice(0, needed);
@@ -169,13 +181,15 @@ function isEligible(
     week: string;
     shift: SchedulingShift;
     leaveKeys: Set<string>;
+    restKeys: Set<string>;
     weeklyDays: Record<string, Set<string>>;
     intervals: Record<string, Interval[]>;
   },
 ) {
-  const { workDate, week, shift, leaveKeys, weeklyDays, intervals } = context;
+  const { workDate, week, shift, leaveKeys, restKeys, weeklyDays, intervals } = context;
 
   if (leaveKeys.has(`${host.id}|${workDate}`)) return false;
+  if (restKeys.has(`${host.id}|${workDate}`)) return false;
 
   const candidate = toInterval(workDate, shift);
   const overlaps = intervals[host.id].some(

@@ -40,6 +40,7 @@ export type AppSettings = {
   id: number;
   weekly_off_request_open: boolean;
   weekly_off_request_period: string | null;
+  weekly_off_quota_per_date: number;
   late_tolerance_minutes: number;
   operational_start: string;
   operational_end: string;

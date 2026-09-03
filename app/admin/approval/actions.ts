@@ -102,9 +102,15 @@ export async function toggleWeeklyOffWindowAction(
 
   const open = String(formData.get("open") ?? "") === "true";
   const period = String(formData.get("period") ?? "").trim();
+  const quotaRaw = Number(formData.get("quotaPerDate"));
+  const quota = Number.isInteger(quotaRaw) && quotaRaw >= 1 && quotaRaw <= 20 ? quotaRaw : null;
 
   if (open && !/^\d{4}-\d{2}$/.test(period)) {
     return { error: "Pilih periode bulan yang dibuka." };
+  }
+
+  if (formData.has("quotaPerDate") && quota === null) {
+    return { error: "Kuota per tanggal harus antara 1 sampai 20 host." };
   }
 
   const supabase = await createClient();
@@ -113,6 +119,7 @@ export async function toggleWeeklyOffWindowAction(
     .update({
       weekly_off_request_open: open,
       weekly_off_request_period: open ? `${period}-01` : null,
+      ...(quota === null ? {} : { weekly_off_quota_per_date: quota }),
     })
     .eq("id", 1);
 
@@ -122,7 +129,11 @@ export async function toggleWeeklyOffWindowAction(
     actorId: admin.id,
     entity: "settings",
     action: "update",
-    after: { weekly_off_request_open: open, weekly_off_request_period: open ? period : null },
+    after: {
+      weekly_off_request_open: open,
+      weekly_off_request_period: open ? period : null,
+      ...(quota === null ? {} : { weekly_off_quota_per_date: quota }),
+    },
   });
 
   revalidateApproval();

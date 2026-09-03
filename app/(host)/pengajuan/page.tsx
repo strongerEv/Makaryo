@@ -8,10 +8,12 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireHost } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import type { DateAvailability } from "@/components/leave/weekly-off-picker";
+import { earliestUrgentLeaveDate } from "@/lib/leave/rules";
 import type { AppSettings, LeaveRequest } from "@/lib/types/database";
 import { LEAVE_STATUS_LABEL, LEAVE_TYPE_LABEL } from "@/lib/types/database";
 import { formatDate, formatDateShort, todayInJakarta } from "@/lib/utils/datetime";
-import { addDays, monthLabel, monthRange } from "@/lib/utils/period";
+import { eachDate, monthLabel, monthRange } from "@/lib/utils/period";
 import { LeaveRequestForms } from "./leave-request-forms";
 import { CancelRequestButton } from "./cancel-request-button";
 
@@ -40,6 +42,23 @@ export default async function LeaveRequestPage() {
     : null;
   const periodRange = period ? monthRange(period) : null;
 
+  // Host tidak boleh membaca pengajuan host lain, jadi ketersediaan tanggal
+  // diambil lewat fungsi database yang hanya membuka jumlahnya.
+  let availability: Record<string, DateAvailability> = {};
+  if (weeklyOffOpen && periodRange) {
+    const { data: rows } = await supabase.rpc("weekly_off_availability", {
+      period_start: periodRange.start,
+      period_end: periodRange.end,
+    });
+
+    availability = Object.fromEntries(
+      (rows ?? []).map((row: { requested_date: string; taken: number; mine: boolean }) => [
+        row.requested_date,
+        { taken: row.taken, mine: row.mine },
+      ]),
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -64,7 +83,10 @@ export default async function LeaveRequestPage() {
             weeklyOffOpen={weeklyOffOpen}
             weeklyOffMin={periodRange?.start}
             weeklyOffMax={periodRange?.end}
-            urgentMin={addDays(todayInJakarta(), 3)}
+            weeklyOffDates={periodRange ? eachDate(periodRange.start, periodRange.end) : undefined}
+            weeklyOffAvailability={availability}
+            weeklyOffQuota={settings?.weekly_off_quota_per_date ?? 1}
+            urgentMin={earliestUrgentLeaveDate(todayInJakarta())}
           />
         </div>
 

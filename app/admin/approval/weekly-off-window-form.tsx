@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { toggleWeeklyOffWindowAction, type ActionState } from "@/app/admin/approval/actions";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Field, Select } from "@/components/ui/field";
+import { Field, Input, Select } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { AppSettings } from "@/lib/types/database";
 import { monthLabel, recentMonths } from "@/lib/utils/period";
@@ -42,15 +42,40 @@ export function WeeklyOffWindowForm({ settings }: { settings: AppSettings | null
       </div>
 
       {open ? (
-        <form action={submit} className="space-y-3">
-          <input type="hidden" name="open" value="false" />
+        <div className="space-y-4">
           <p className="text-[13px] text-ink-muted">
             Sedang dibuka untuk {period ? monthLabel(period) : "periode berjalan"}. Tutup bila jadwal sudah disusun.
           </p>
-          <SubmitButton block variant="outline" pendingLabel="Menutup…">
-            Tutup pengajuan
-          </SubmitButton>
-        </form>
+
+          <form action={submit} className="space-y-3">
+            <input type="hidden" name="open" value="true" />
+            <input type="hidden" name="period" value={period} />
+            <Field
+              label="Kuota per tanggal"
+              htmlFor="kuota-tanggal-aktif"
+              hint="Berapa host yang boleh libur di tanggal yang sama. Tanggal yang sudah penuh tidak bisa dipilih host lain."
+            >
+              <Input
+                id="kuota-tanggal-aktif"
+                name="quotaPerDate"
+                type="number"
+                min={1}
+                max={20}
+                defaultValue={settings?.weekly_off_quota_per_date ?? 1}
+              />
+            </Field>
+            <SubmitButton block variant="soft" pendingLabel="Menyimpan…">
+              Simpan kuota
+            </SubmitButton>
+          </form>
+
+          <form action={submit}>
+            <input type="hidden" name="open" value="false" />
+            <SubmitButton block variant="outline" pendingLabel="Menutup…">
+              Tutup pengajuan
+            </SubmitButton>
+          </form>
+        </div>
       ) : (
         <form action={submit} className="space-y-3">
           <input type="hidden" name="open" value="true" />
@@ -62,6 +87,21 @@ export function WeeklyOffWindowForm({ settings }: { settings: AppSettings | null
                 </option>
               ))}
             </Select>
+          </Field>
+
+          <Field
+            label="Kuota per tanggal"
+            htmlFor="kuota-tanggal"
+            hint="Berapa host yang boleh libur di tanggal yang sama."
+          >
+            <Input
+              id="kuota-tanggal"
+              name="quotaPerDate"
+              type="number"
+              min={1}
+              max={20}
+              defaultValue={settings?.weekly_off_quota_per_date ?? 1}
+            />
           </Field>
           <SubmitButton block pendingLabel="Membuka…">
             Buka pengajuan libur

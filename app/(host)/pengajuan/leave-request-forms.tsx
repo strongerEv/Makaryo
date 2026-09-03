@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { submitLeaveRequestAction, type ActionState } from "@/app/(host)/pengajuan/actions";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardHeader } from "@/components/ui/card";
+import { WeeklyOffPicker, type DateAvailability } from "@/components/leave/weekly-off-picker";
 import { Field, Input, Textarea } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 
@@ -14,11 +15,17 @@ export function LeaveRequestForms({
   weeklyOffOpen,
   weeklyOffMin,
   weeklyOffMax,
+  weeklyOffDates,
+  weeklyOffAvailability,
+  weeklyOffQuota,
   urgentMin,
 }: {
   weeklyOffOpen: boolean;
   weeklyOffMin?: string;
   weeklyOffMax?: string;
+  weeklyOffDates?: string[];
+  weeklyOffAvailability?: Record<string, DateAvailability>;
+  weeklyOffQuota?: number;
   urgentMin: string;
 }) {
   const [weeklyState, submitWeekly] = useActionState(submitLeaveRequestAction, INITIAL);
@@ -37,17 +44,29 @@ export function LeaveRequestForms({
 
         <form action={submitWeekly} className="space-y-4">
           <input type="hidden" name="type" value="weekly_off" />
-          <Field label="Tanggal libur" htmlFor="weekly-date" required>
-            <Input
-              id="weekly-date"
-              name="requestedDate"
-              type="date"
-              required
-              min={weeklyOffMin}
-              max={weeklyOffMax}
-              disabled={!weeklyOffOpen}
-            />
-          </Field>
+
+          {weeklyOffOpen && weeklyOffDates && weeklyOffDates.length > 0 ? (
+            <Field label="Pilih tanggal libur" required>
+              <WeeklyOffPicker
+                dates={weeklyOffDates}
+                availability={weeklyOffAvailability ?? {}}
+                quota={weeklyOffQuota ?? 1}
+              />
+            </Field>
+          ) : (
+            <Field label="Tanggal libur" htmlFor="weekly-date" required>
+              <Input
+                id="weekly-date"
+                name="requestedDate"
+                type="date"
+                required
+                min={weeklyOffMin}
+                max={weeklyOffMax}
+                disabled={!weeklyOffOpen}
+              />
+            </Field>
+          )}
+
           <SubmitButton block disabled={!weeklyOffOpen} pendingLabel="Mengirim…">
             Ajukan libur mingguan
           </SubmitButton>

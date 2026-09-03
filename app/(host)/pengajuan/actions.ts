@@ -4,16 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { requireHost } from "@/lib/auth/session";
+import { isUrgentLeadTimeValid, isWeeklyOffDateAvailable, URGENT_MIN_LEAD_DAYS } from "@/lib/leave/rules";
 import { getAdminIds, notifyUsers } from "@/lib/notifications/notify";
 import { createClient } from "@/lib/supabase/server";
 import { LEAVE_TYPE_LABEL } from "@/lib/types/database";
 import { formatDate, todayInJakarta } from "@/lib/utils/datetime";
-import { addDays, monthRange } from "@/lib/utils/period";
+import { monthRange } from "@/lib/utils/period";
 
 export type ActionState = { error?: string; success?: string };
-
-/** Izin mendadak wajib diajukan minimal H-3. */
-const URGENT_MIN_LEAD_DAYS = 3;
 
 const schema = z.object({
   type: z.enum(["weekly_off", "urgent"]),
@@ -40,7 +38,7 @@ export async function submitLeaveRequestAction(
 
   if (type === "urgent") {
     if (!reason || reason.length < 5) return { error: "Alasan izin wajib diisi minimal 5 karakter." };
-    if (requestedDate < addDays(today, URGENT_MIN_LEAD_DAYS)) {
+    if (!isUrgentLeadTimeValid(requestedDate, today)) {
       return { error: `Izin mendadak wajib diajukan minimal H-${URGENT_MIN_LEAD_DAYS} sebelum tanggalnya.` };
     }
   }
@@ -48,7 +46,7 @@ export async function submitLeaveRequestAction(
   if (type === "weekly_off") {
     const { data: settings } = await supabase
       .from("app_settings")
-      .select("weekly_off_request_open, weekly_off_request_period")
+      .select("weekly_off_request_open, weekly_off_request_period, weekly_off_quota_per_date")
       .eq("id", 1)
       .single();
 
@@ -61,6 +59,24 @@ export async function submitLeaveRequestAction(
       if (requestedDate < start || requestedDate > end) {
         return { error: `Tanggal harus berada di periode ${formatDate(start)} – ${formatDate(end)}.` };
       }
+    }
+
+    // Satu tanggal hanya boleh diambil sejumlah host tertentu, supaya libur
+    // tidak menumpuk di hari yang sama dan shiftnya tetap terisi.
+    const kuota = settings.weekly_off_quota_per_date ?? 1;
+    const { data: ketersediaan } = await supabase.rpc("weekly_off_availability", {
+      period_start: requestedDate,
+      period_end: requestedDate,
+    });
+
+    const terpakai = (ketersediaan ?? [])[0] as { taken: number; mine: boolean } | undefined;
+    if (terpakai?.mine) {
+      return { error: "Kamu sudah mengajukan libur pada tanggal itu." };
+    }
+    if (!isWeeklyOffDateAvailable(terpakai, kuota)) {
+      return {
+        error: `Tanggal ${formatDate(requestedDate)} sudah penuh — pilih tanggal lain yang masih tersedia.`,
+      };
     }
   }
 
