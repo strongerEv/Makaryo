@@ -1,21 +1,22 @@
 "use client";
 
-import { ArrowRightLeft, CheckSquare, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { CheckSquare, Pencil, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useActionState, useEffect, useMemo, useState } from "react";
 
 import {
   assignHostAction,
-  moveAssignmentAction,
   removeAssignmentAction,
   removeAssignmentsAction,
   type ActionState,
 } from "@/app/admin/jadwal/actions";
+import {
+  AssignmentEditorSheet,
+  type EditorTarget,
+} from "@/components/schedule/assignment-editor-sheet";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { buttonClass } from "@/components/ui/button";
 import { Card, CardHeader } from "@/components/ui/card";
-import { Field, Select } from "@/components/ui/field";
-import { Modal } from "@/components/ui/modal";
+import { Select } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { Profile, Shift } from "@/lib/types/database";
 import { formatClock, formatDate } from "@/lib/utils/datetime";
@@ -45,14 +46,13 @@ export function DayEditor({
   const [assignState, assign] = useActionState(assignHostAction, INITIAL);
   const [removeState, remove] = useActionState(removeAssignmentAction, INITIAL);
   const [bulkState, removeMany] = useActionState(removeAssignmentsAction, INITIAL);
-  const [moveState, move] = useActionState(moveAssignmentAction, INITIAL);
 
   const [menandai, setMenandai] = useState(false);
   const [terpilih, setTerpilih] = useState<string[]>([]);
-  const [dipindah, setDipindah] = useState<DayAssignment | null>(null);
+  const [diedit, setDiedit] = useState<EditorTarget | null>(null);
 
-  const error = assignState.error ?? removeState.error ?? bulkState.error ?? moveState.error;
-  const success = bulkState.success ?? moveState.success;
+  const error = assignState.error ?? removeState.error ?? bulkState.error;
+  const success = bulkState.success;
 
   const idHariIni = useMemo(() => assignments.map((item) => item.id), [assignments]);
 
@@ -67,10 +67,6 @@ export function DayEditor({
       setMenandai(false);
     }
   }, [bulkState.success]);
-
-  useEffect(() => {
-    if (moveState.success) setDipindah(null);
-  }, [moveState.success]);
 
   const toggle = (id: string) =>
     setTerpilih((sebelum) =>
@@ -88,7 +84,7 @@ export function DayEditor({
     <Card className="self-start">
       <CardHeader
         title={formatDate(date)}
-        description="Tambah, pindahkan, atau keluarkan host dari shift hari ini."
+        description="Tambah, ubah, atau keluarkan host dari shift hari ini."
         action={
           assignments.length > 0 ? (
             menandai ? (
@@ -204,12 +200,21 @@ export function DayEditor({
 
                             <button
                               type="button"
-                              onClick={() => setDipindah(item)}
+                              onClick={() =>
+                                setDiedit({
+                                  id: item.id,
+                                  hostId: item.hostId,
+                                  shiftId: item.shiftId,
+                                  workDate: date,
+                                  hostName: item.hostName,
+                                  status: item.status,
+                                })
+                              }
                               className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-primary"
-                              title="Pindahkan ke shift lain"
+                              title="Ubah host, shift, atau tanggalnya"
                             >
-                              <ArrowRightLeft className="size-4" aria-hidden />
-                              <span className="sr-only">Pindahkan {item.hostName}</span>
+                              <Pencil className="size-4" aria-hidden />
+                              <span className="sr-only">Ubah penugasan {item.hostName}</span>
                             </button>
 
                             <form action={remove}>
@@ -252,46 +257,20 @@ export function DayEditor({
         </div>
       )}
 
-      <Modal
-        open={dipindah !== null}
-        onClose={() => setDipindah(null)}
-        title="Pindahkan penugasan"
-        description={dipindah ? `${dipindah.hostName} · ${formatDate(date)}` : undefined}
-      >
-        {dipindah ? (
-          <form action={move} className="space-y-4">
-            <input type="hidden" name="assignmentId" value={dipindah.id} />
+      {diedit ? (
+        <AssignmentEditorSheet
+          target={diedit}
+          shifts={shifts.map((shift) => ({
+            id: shift.id,
+            name: shift.name,
+            startTime: shift.start_time,
+            endTime: shift.end_time,
+          }))}
+          hosts={hosts.map((host) => ({ id: host.id, name: host.full_name }))}
+          onClose={() => setDiedit(null)}
+        />
+      ) : null}
 
-            <Field label="Pindah ke shift" htmlFor="pindah-shift" required>
-              <Select
-                id="pindah-shift"
-                name="shiftId"
-                defaultValue={shifts.find((shift) => shift.id !== dipindah.shiftId)?.id ?? ""}
-                required
-              >
-                {shifts
-                  .filter((shift) => shift.id !== dipindah.shiftId)
-                  .map((shift) => (
-                    <option key={shift.id} value={shift.id}>
-                      {shift.name} · {formatClock(shift.start_time)}–{formatClock(shift.end_time)}
-                    </option>
-                  ))}
-              </Select>
-            </Field>
-
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDipindah(null)}
-                className={buttonClass({ variant: "ghost" })}
-              >
-                Batal
-              </button>
-              <SubmitButton pendingLabel="Memindahkan…">Pindahkan</SubmitButton>
-            </div>
-          </form>
-        ) : null}
-      </Modal>
     </Card>
   );
 }

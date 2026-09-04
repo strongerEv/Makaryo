@@ -3,9 +3,14 @@ import Link from "next/link";
 import { AlertTriangle, CalendarCheck, CalendarClock, ChevronLeft, ChevronRight, Users } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { MonthCalendar, type CalendarItem } from "@/components/schedule/month-calendar";
+import { type CalendarItem } from "@/components/schedule/month-calendar";
 import { MonthNav } from "@/components/schedule/month-nav";
-import { WeekBoard, type WeekAssignment, type WeekLeave } from "@/components/schedule/week-board";
+import { type WeekLeave } from "@/components/schedule/week-board";
+import {
+  EditableMonthCalendar,
+  EditableWeekBoard,
+  type BoardAssignment,
+} from "./schedule-board";
 import { Alert } from "@/components/ui/alert";
 import { Card, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
@@ -129,15 +134,6 @@ export default async function AdminSchedulePage({
   const warnings = period?.warnings ?? [];
   const dayAssignments = assignments.filter((row) => row.work_date === selectedDate);
 
-  const weekAssignments: WeekAssignment[] = assignments.map((row) => ({
-    id: row.id,
-    hostId: row.host_id,
-    hostName: row.profiles?.full_name ?? "Host",
-    shiftId: row.shift_id,
-    workDate: row.work_date,
-    status: row.status,
-  }));
-
   const hrefFor = (target: { tampilan?: Tampilan; tanggal?: string; bulan?: string }) => {
     const query = new URLSearchParams({
       bulan: target.bulan ?? month,
@@ -146,6 +142,24 @@ export default async function AdminSchedulePage({
     });
     return `/admin/jadwal?${query.toString()}`;
   };
+
+  // Tautan pilih-hari dihitung di sini karena papannya kini client component —
+  // fungsi tidak boleh menyeberangi batas server/klien.
+  const hrefByDate: Record<string, string> = {};
+  for (const date of tampilan === "minggu" ? weekDates : eachDate(monthStart, monthEnd)) {
+    hrefByDate[date] = hrefFor({ tanggal: date });
+  }
+
+  const boardAssignments: BoardAssignment[] = assignments.map((row) => ({
+    id: row.id,
+    hostId: row.host_id,
+    hostName: row.profiles?.full_name ?? "Host",
+    shiftId: row.shift_id,
+    workDate: row.work_date,
+    status: row.status,
+  }));
+
+  const editorHosts = hosts.map((host) => ({ id: host.id, name: host.full_name }));
 
   return (
     <>
@@ -222,14 +236,17 @@ export default async function AdminSchedulePage({
 
       {tampilan === "minggu" ? (
         <div className="space-y-4">
-          <WeekBoard
+          <EditableWeekBoard
             dates={weekDates}
             shifts={shifts}
-            assignments={weekAssignments}
+            assignments={boardAssignments.filter(
+              (row) => row.workDate >= weekDates[0] && row.workDate <= weekDates[6],
+            )}
             leaves={leaves}
-            hosts={hosts.map((host) => ({ id: host.id, name: host.full_name }))}
+            hosts={editorHosts}
+            weekHosts={editorHosts}
+            hrefByDate={hrefByDate}
             selectedDate={selectedDate}
-            hrefFor={(date) => hrefFor({ tanggal: date })}
           />
 
           <DayEditor
@@ -253,12 +270,14 @@ export default async function AdminSchedulePage({
               title="Kalender bulanan"
               description="Klik tanggal untuk mengelola shift hari itu."
             />
-            <MonthCalendar
+            <EditableMonthCalendar
               month={month}
               items={items}
+              assignments={boardAssignments}
+              shifts={shifts}
+              hosts={editorHosts}
+              hrefByDate={hrefByDate}
               selectedDate={selectedDate}
-              hrefFor={(date) => hrefFor({ tanggal: date })}
-              emptyLabel="Kosong"
             />
             <p className="mt-4 text-[12px] text-ink-muted">
               Kartu pudar berarti masih draft dan belum terlihat host.

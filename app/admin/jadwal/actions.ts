@@ -10,6 +10,7 @@ import { notifyUsers } from "@/lib/notifications/notify";
 import { generateSchedule } from "@/lib/scheduling/engine";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Shift } from "@/lib/types/database";
+import { formatDate } from "@/lib/utils/datetime";
 import { monthLabel, monthRange } from "@/lib/utils/period";
 
 export type ActionState = { error?: string; success?: string };
@@ -504,18 +505,33 @@ export async function removeAssignmentsAction(_prev: ActionState, formData: Form
 }
 
 /**
- * Memindahkan satu penugasan ke shift lain di hari yang sama.
+ * Mengubah satu penugasan: hostnya, shiftnya, tanggalnya, atau ketiganya.
  *
- * Ini bentuk "edit" yang paling sering dibutuhkan: hostnya benar, shiftnya yang
- * keliru. Pemeriksaan bentrok jamnya sama dengan saat menambah host baru.
+ * Ini pintu edit tunggal yang dipakai tampilan harian, mingguan, dan bulanan,
+ * supaya aturan anti-bentroknya cuma ditulis sekali. Menaruh host di shift yang
+ * sama pada hari yang sama otomatis tertolak karena jamnya pasti bertumpuk
+ * dengan dirinya sendiri.
  */
-export async function moveAssignmentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+export async function updateAssignmentAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const admin = await requireAdmin();
 
-  const assignmentId = String(formData.get("assignmentId") ?? "");
-  const shiftId = String(formData.get("shiftId") ?? "");
-  if (!assignmentId || !shiftId) return { error: "Pilih shift tujuan terlebih dahulu." };
+  const parsed = z
+    .object({
+      assignmentId: z.string().uuid("Penugasan tidak dikenal."),
+      hostId: z.string().uuid("Host wajib dipilih."),
+      shiftId: z.string().uuid("Shift wajib dipilih."),
+      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal tidak valid."),
+    })
+    .safeParse({
+      assignmentId: formData.get("assignmentId"),
+      hostId: formData.get("hostId"),
+      shiftId: formData.get("shiftId"),
+      workDate: formData.get("workDate"),
+    });
 
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data tidak valid." };
+
+  const { assignmentId, hostId, shiftId, workDate } = parsed.data;
   const supabase = await createClient();
 
   const { data: current } = await supabase
@@ -524,18 +540,29 @@ export async function moveAssignmentAction(_prev: ActionState, formData: FormDat
     .eq("id", assignmentId)
     .single();
 
-  if (!current) return { error: "Penugasan tidak ditemukan." };
-  if (current.shift_id === shiftId) return { error: "Penugasan sudah berada di shift itu." };
+  if (!current) return { error: "Penugasan tidak ditemukan — mungkin sudah dihapus." };
+
+  const tetap =
+    current.host_id === hostId && current.shift_id === shiftId && current.work_date === workDate;
+  if (tetap) return { error: "Tidak ada yang diubah." };
 
   const { data: shift } = await supabase.from("shifts").select("*").eq("id", shiftId).single();
   if (!shift) return { error: "Shift tujuan tidak ditemukan." };
 
-  const workDate = current.work_date as string;
+  const { data: host } = await supabase
+    .from("profiles")
+    .select("id, full_name, role, account_status")
+    .eq("id", hostId)
+    .single();
+
+  if (!host || host.role !== "host" || host.account_status !== "active") {
+    return { error: "Host tujuan tidak aktif." };
+  }
 
   const { data: sameDay } = await supabase
     .from("schedule_assignments")
     .select("id, work_date, shifts(name, start_time, end_time)")
-    .eq("host_id", current.host_id as string)
+    .eq("host_id", hostId)
     .eq("work_date", workDate)
     .neq("id", assignmentId);
 
@@ -550,26 +577,41 @@ export async function moveAssignmentAction(_prev: ActionState, formData: FormDat
 
   if (conflict) {
     const other = conflict.shifts as unknown as { name: string };
-    return { error: `Host ini sudah dijadwalkan di ${other.name} pada jam yang bertumpuk.` };
+    return {
+      error: `${host.full_name} sudah dijadwalkan di ${other.name} pada jam yang bertumpuk.`,
+    };
   }
 
   const { error } = await supabase
     .from("schedule_assignments")
-    .update({ shift_id: shiftId, source: "manual" })
+    .update({ host_id: hostId, shift_id: shiftId, work_date: workDate, source: "manual" })
     .eq("id", assignmentId);
 
-  if (error) return { error: "Gagal memindahkan penugasan." };
+  if (error) return { error: "Gagal menyimpan perubahan penugasan." };
 
   await logAudit({
     actorId: admin.id,
     entity: "schedule",
     action: "update",
     entityId: assignmentId,
-    targetUserId: current.host_id as string,
-    before: { shift_id: current.shift_id, work_date: workDate },
-    after: { shift_id: shiftId, work_date: workDate },
+    targetUserId: hostId,
+    before: { host_id: current.host_id, shift_id: current.shift_id, work_date: current.work_date },
+    after: { host_id: hostId, shift_id: shiftId, work_date: workDate },
   });
 
+  // Jadwal yang sudah terbit berarti sudah dilihat host, jadi perubahannya
+  // dikabarkan — ke host lama bila digantikan, dan ke host barunya.
+  if (current.status === "published") {
+    const penerima = [...new Set([current.host_id as string, hostId])];
+    await notifyUsers({
+      userIds: penerima,
+      type: "schedule_published",
+      title: "Jadwal kamu berubah",
+      body: `Ada perubahan penugasan pada ${formatDate(workDate)}. Cek jadwal terbarumu.`,
+      link: "/jadwal",
+    });
+  }
+
   revalidateSchedule();
-  return { success: `Penugasan dipindah ke ${(shift as Shift).name}.` };
+  return { success: `Penugasan diperbarui: ${host.full_name} · ${(shift as Shift).name}.` };
 }

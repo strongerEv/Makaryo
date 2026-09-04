@@ -1,4 +1,6 @@
-import { CalendarOff, UserRound } from "lucide-react";
+"use client";
+
+import { CalendarOff, Plus, UserRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { Shift } from "@/lib/types/database";
@@ -45,16 +47,23 @@ export function WeekBoard({
   assignments,
   leaves,
   hosts,
-  hrefFor,
+  hrefByDate,
   selectedDate,
+  onEdit,
+  onAdd,
 }: {
   dates: string[];
   shifts: Shift[];
   assignments: WeekAssignment[];
   leaves: WeekLeave[];
   hosts: WeekHost[];
-  hrefFor?: (date: string) => string;
+  /** Tautan pilih-hari per tanggal. Peta, bukan fungsi, agar aman dilewatkan dari server. */
+  hrefByDate?: Record<string, string>;
   selectedDate?: string;
+  /** Diisi admin: membuka editor untuk satu penugasan. */
+  onEdit?: (assignment: WeekAssignment) => void;
+  /** Diisi admin: membuka editor tambah untuk satu shift di satu tanggal. */
+  onAdd?: (date: string, shiftId: string) => void;
 }) {
   const today = todayInJakarta();
 
@@ -70,22 +79,37 @@ export function WeekBoard({
         const isToday = date === today;
         const isSelected = date === selectedDate;
 
-        const konten = (
+        const href = hrefByDate?.[date];
+        const namaHari = new Intl.DateTimeFormat("id-ID", { timeZone: "UTC", weekday: "long" }).format(
+          new Date(`${date}T00:00:00Z`),
+        );
+
+        const judul = (
+          <>
+            <span className={cn("text-sm font-bold", isToday ? "text-primary" : "text-ink")}>{namaHari}</span>
+            <span className="tabular text-[12px] text-ink-muted">{formatDateShort(date)}</span>
+          </>
+        );
+
+        return (
           <div
+            key={date}
             className={cn(
               "flex h-full flex-col gap-3 rounded-[var(--radius-card)] border bg-surface p-4 transition-colors",
               isSelected ? "border-primary" : "border-line",
-              hrefFor && "hover:border-primary/50",
             )}
           >
-            <div className="flex items-baseline justify-between gap-2">
-              <p className={cn("text-sm font-bold", isToday ? "text-primary" : "text-ink")}>
-                {new Intl.DateTimeFormat("id-ID", { timeZone: "UTC", weekday: "long" }).format(
-                  new Date(`${date}T00:00:00Z`),
-                )}
-              </p>
-              <span className="tabular text-[12px] text-ink-muted">{formatDateShort(date)}</span>
-            </div>
+            {href ? (
+              <a
+                href={href}
+                className="-m-1 flex items-baseline justify-between gap-2 rounded-[10px] p-1 transition-colors hover:bg-surface-muted"
+                title="Kelola hari ini di panel bawah"
+              >
+                {judul}
+              </a>
+            ) : (
+              <div className="flex items-baseline justify-between gap-2">{judul}</div>
+            )}
 
             <div className="flex flex-1 flex-col gap-2.5">
               {shifts.map((shift) => {
@@ -99,8 +123,23 @@ export function WeekBoard({
                         <span className={cn("size-2 shrink-0 rounded-full", DOT[shift.color] ?? DOT.primary)} aria-hidden />
                         <span className="truncate text-[12px] font-bold text-ink">{shift.name}</span>
                       </span>
-                      <span className="tabular shrink-0 text-[11px] font-semibold text-ink-muted">
-                        {formatClock(shift.start_time)}–{formatClock(shift.end_time)}
+                      <span className="flex shrink-0 items-center gap-1">
+                        <span className="tabular text-[11px] font-semibold text-ink-muted">
+                          {formatClock(shift.start_time)}–{formatClock(shift.end_time)}
+                        </span>
+                        {onAdd ? (
+                          <button
+                            type="button"
+                            onClick={() => onAdd(date, shift.id)}
+                            className="inline-flex size-5 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-primary hover:text-white"
+                            title={`Tambah host ke ${shift.name}`}
+                          >
+                            <Plus className="size-3.5" aria-hidden />
+                            <span className="sr-only">
+                              Tambah host ke {shift.name} pada {formatDateShort(date)}
+                            </span>
+                          </button>
+                        ) : null}
                       </span>
                     </div>
 
@@ -110,21 +149,42 @@ export function WeekBoard({
                       </p>
                     ) : (
                       <ul className="mt-1.5 flex flex-wrap gap-1">
-                        {isi.map((item) => (
-                          <li
-                            key={item.id}
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                              item.status === "published"
-                                ? "bg-primary-soft text-primary"
-                                : "bg-surface text-ink-muted",
-                            )}
-                            title={item.status === "published" ? "Terpublish" : "Masih draft"}
-                          >
-                            <UserRound className="size-3" aria-hidden />
-                            {item.hostName.split(" ")[0]}
-                          </li>
-                        ))}
+                        {isi.map((item) => {
+                          const gaya = cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                            item.status === "published"
+                              ? "bg-primary-soft text-primary"
+                              : "bg-surface text-ink-muted",
+                          );
+                          const isiChip = (
+                            <>
+                              <UserRound className="size-3" aria-hidden />
+                              {item.hostName.split(" ")[0]}
+                            </>
+                          );
+
+                          return (
+                            <li key={item.id}>
+                              {onEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onEdit(item)}
+                                  className={cn(gaya, "transition-colors hover:ring-2 hover:ring-primary/40")}
+                                  title={`Ubah penugasan ${item.hostName}`}
+                                >
+                                  {isiChip}
+                                </button>
+                              ) : (
+                                <span
+                                  className={gaya}
+                                  title={item.status === "published" ? "Terpublish" : "Masih draft"}
+                                >
+                                  {isiChip}
+                                </span>
+                              )}
+                            </li>
+                          );
+                        })}
                         {kurang ? (
                           <li className="inline-flex items-center rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-semibold text-coral">
                             kurang {shift.min_hosts - isi.length}
@@ -166,14 +226,6 @@ export function WeekBoard({
               )}
             </div>
           </div>
-        );
-
-        return hrefFor ? (
-          <a key={date} href={hrefFor(date)} className="block h-full">
-            {konten}
-          </a>
-        ) : (
-          <div key={date}>{konten}</div>
         );
       })}
     </div>
