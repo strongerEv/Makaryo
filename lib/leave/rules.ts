@@ -26,3 +26,25 @@ export function isWeeklyOffDateAvailable(
   if (info.mine) return false;
   return info.taken < Math.max(1, quotaPerDate);
 }
+
+/** Tukar shift wajib diajukan minimal H-1 sebelum tanggal shiftnya. */
+export const SWAP_MIN_LEAD_DAYS = 1;
+
+/** Tanggal paling awal yang boleh ditukar. */
+export function earliestSwapDate(today: string, minLeadDays = SWAP_MIN_LEAD_DAYS) {
+  return addDays(today, minLeadDays);
+}
+
+/**
+ * Apakah sebuah shift masih boleh ditukar.
+ *
+ * Keduanya diperiksa — shift milik pengaju maupun shift tujuan — supaya tidak
+ * ada penukaran yang menyentuh hari ini atau hari yang sudah lewat.
+ */
+export function isSwapLeadTimeValid(
+  workDate: string,
+  today: string,
+  minLeadDays = SWAP_MIN_LEAD_DAYS,
+) {
+  return workDate >= earliestSwapDate(today, minLeadDays);
+}

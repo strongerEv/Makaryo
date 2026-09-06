@@ -19,6 +19,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { Profile, Shift } from "@/lib/types/database";
+import { formatLiveHours, liveMinutes } from "@/lib/attendance/shift-hours";
 import { formatClock, formatDate } from "@/lib/utils/datetime";
 
 const INITIAL: ActionState = {};
@@ -164,8 +165,21 @@ export function DayEditor({
                   <div>
                     <p className="text-sm font-bold text-ink">{shift.name}</p>
                     <p className="tabular text-[12px] text-ink-muted">
-                      {formatClock(shift.start_time)} – {formatClock(shift.end_time)}
+                      {formatClock(shift.start_time)} – {formatClock(shift.end_time)} · live{" "}
+                      {formatLiveHours(
+                        liveMinutes({
+                          startTime: shift.start_time,
+                          endTime: shift.end_time,
+                          breakStart: shift.break_start,
+                          breakEnd: shift.break_end,
+                        }),
+                      )}
                     </p>
+                    {shift.break_start && shift.break_end ? (
+                      <p className="tabular text-[11px] text-ink-muted/80">
+                        istirahat {formatClock(shift.break_start)}–{formatClock(shift.break_end)}
+                      </p>
+                    ) : null}
                   </div>
                   <Badge tone={shortage ? "danger" : "success"}>
                     {assigned.length}/{shift.min_hosts} host

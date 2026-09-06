@@ -143,6 +143,12 @@ export function WeekBoard({
                       </span>
                     </div>
 
+                    {shift.break_start && shift.break_end ? (
+                      <p className="tabular mt-0.5 text-[10px] text-ink-muted/80">
+                        istirahat {formatClock(shift.break_start)}–{formatClock(shift.break_end)}
+                      </p>
+                    ) : null}
+
                     {isi.length === 0 ? (
                       <p className={cn("mt-1.5 text-[11px] font-semibold", kurang ? "text-coral" : "text-ink-muted")}>
                         Belum ada host

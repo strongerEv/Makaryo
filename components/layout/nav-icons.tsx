@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  ArrowLeftRight,
   CalendarDays,
   ClipboardList,
   FileBarChart,
@@ -33,6 +34,7 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   inbox: Inbox,
   reports: FileBarChart,
   shift: Settings2,
+  swap: ArrowLeftRight,
   history: History,
   diagnostics: Activity,
   demo: Sparkles,

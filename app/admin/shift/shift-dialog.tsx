@@ -101,6 +101,29 @@ export function ShiftDialog({
             </Field>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Mulai istirahat"
+              htmlFor={`break-start-${shift?.id ?? "new"}`}
+              hint="Kosongkan bila shift ini tanpa istirahat."
+            >
+              <Input
+                id={`break-start-${shift?.id ?? "new"}`}
+                name="breakStart"
+                type="time"
+                defaultValue={shift?.break_start?.slice(0, 5) ?? ""}
+              />
+            </Field>
+            <Field label="Selesai istirahat" htmlFor={`break-end-${shift?.id ?? "new"}`}>
+              <Input
+                id={`break-end-${shift?.id ?? "new"}`}
+                name="breakEnd"
+                type="time"
+                defaultValue={shift?.break_end?.slice(0, 5) ?? ""}
+              />
+            </Field>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Host minimum" htmlFor={`min-${shift?.id ?? "new"}`} required>
               <Input

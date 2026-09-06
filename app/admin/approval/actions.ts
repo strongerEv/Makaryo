@@ -145,3 +145,111 @@ export async function toggleWeeklyOffWindowAction(
       : "Pengajuan libur mingguan ditutup.",
   };
 }
+
+/**
+ * Menyetujui atau menolak pengajuan tukar shift.
+ *
+ * Saat disetujui, host pada kedua penugasan benar-benar ditukar — jadi jadwal
+ * yang dilihat kedua host langsung berubah tanpa admin menyunting manual.
+ */
+export async function reviewSwapRequestAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const parsed = reviewSchema.safeParse({
+    requestId: formData.get("requestId"),
+    decision: formData.get("decision"),
+    note: formData.get("note") ?? undefined,
+  });
+  if (!parsed.success) return { error: "Keputusan tidak valid." };
+
+  const { requestId, decision, note } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: request } = await supabase
+    .from("shift_swap_requests")
+    .select("*")
+    .eq("id", requestId)
+    .single();
+
+  if (!request) return { error: "Pengajuan tidak ditemukan." };
+  if (request.status !== "pending") return { error: "Pengajuan ini sudah diproses sebelumnya." };
+
+  if (decision === "approved") {
+    const { data: rows } = await supabase
+      .from("schedule_assignments")
+      .select("id, host_id, work_date, shifts(name)")
+      .in("id", [request.requester_assignment_id, request.target_assignment_id]);
+
+    const milikPengaju = (rows ?? []).find((row) => row.id === request.requester_assignment_id);
+    const milikTujuan = (rows ?? []).find((row) => row.id === request.target_assignment_id);
+
+    if (!milikPengaju || !milikTujuan) {
+      return { error: "Jadwalnya sudah berubah — salah satu shift tidak ada lagi. Tolak pengajuan ini." };
+    }
+
+    // Host masih harus sesuai catatan pengajuan; kalau sudah digeser admin lain,
+    // penukaran dibatalkan agar tidak memindahkan orang yang salah.
+    if (milikPengaju.host_id !== request.requester_id || milikTujuan.host_id !== request.target_id) {
+      return { error: "Jadwalnya sudah berubah sejak pengajuan dibuat. Minta host mengajukan ulang." };
+    }
+
+    // Penukaran dijalankan satu pernyataan di database supaya kedua penugasan
+    // berubah bersamaan — tidak mungkin berhenti di tengah dan menyisakan dua
+    // shift yang dimiliki orang yang sama.
+    const { error: swapError } = await supabase.rpc("swap_assignment_hosts", {
+      first_assignment: milikPengaju.id as string,
+      second_assignment: milikTujuan.id as string,
+    });
+
+    if (swapError) return { error: "Gagal menukar jadwalnya. Coba lagi." };
+  }
+
+  const { error } = await supabase
+    .from("shift_swap_requests")
+    .update({
+      status: decision,
+      reviewed_by: admin.id,
+      reviewed_at: new Date().toISOString(),
+      review_note: note || null,
+    })
+    .eq("id", requestId);
+
+  if (error) return { error: "Gagal menyimpan keputusan." };
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "schedule",
+    action: decision === "approved" ? "approve" : "reject",
+    entityId: requestId,
+    targetUserId: request.requester_id,
+    after: {
+      swap: true,
+      requester_assignment: request.requester_assignment_id,
+      target_assignment: request.target_assignment_id,
+      note: note || null,
+    },
+  });
+
+  await notifyUsers({
+    userIds: [request.requester_id, request.target_id],
+    type: "approval",
+    title: decision === "approved" ? "Tukar shift disetujui" : "Tukar shift ditolak",
+    body:
+      decision === "approved"
+        ? "Jadwalmu sudah diperbarui sesuai penukaran."
+        : `Pengajuan tukar shift ditolak admin.${note ? ` Catatan: ${note}` : ""}`,
+    link: "/jadwal",
+  });
+
+  revalidateApproval();
+  revalidatePath("/tukar-shift");
+  revalidatePath("/jadwal");
+  revalidatePath("/admin/jadwal");
+
+  return {
+    success: decision === "approved" ? "Tukar shift disetujui dan jadwalnya sudah ditukar." : "Pengajuan ditolak.",
+  };
+}

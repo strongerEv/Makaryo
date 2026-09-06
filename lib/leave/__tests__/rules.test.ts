@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  earliestSwapDate,
   earliestUrgentLeaveDate,
+  isSwapLeadTimeValid,
   isUrgentLeadTimeValid,
   isWeeklyOffDateAvailable,
 } from "@/lib/leave/rules";
@@ -53,5 +55,31 @@ describe("ketersediaan tanggal libur mingguan", () => {
   it("mengikuti kuota bila admin mengizinkan lebih dari satu host per tanggal", () => {
     expect(isWeeklyOffDateAvailable({ taken: 1, mine: false }, 2)).toBe(true);
     expect(isWeeklyOffDateAvailable({ taken: 2, mine: false }, 2)).toBe(false);
+  });
+});
+
+describe("aturan tukar shift", () => {
+  it("menolak shift hari ini", () => {
+    expect(isSwapLeadTimeValid("2026-09-06", "2026-09-06")).toBe(false);
+  });
+
+  it("menolak shift yang sudah lewat", () => {
+    expect(isSwapLeadTimeValid("2026-09-05", "2026-09-06")).toBe(false);
+  });
+
+  it("menerima shift besok — batas H-1", () => {
+    expect(isSwapLeadTimeValid("2026-09-07", "2026-09-06")).toBe(true);
+  });
+
+  it("menerima shift yang lebih jauh", () => {
+    expect(isSwapLeadTimeValid("2026-09-20", "2026-09-06")).toBe(true);
+  });
+
+  it("earliestSwapDate mengembalikan besok", () => {
+    expect(earliestSwapDate("2026-09-06")).toBe("2026-09-07");
+  });
+
+  it("tetap benar saat berganti bulan", () => {
+    expect(earliestSwapDate("2026-09-30")).toBe("2026-10-01");
   });
 });

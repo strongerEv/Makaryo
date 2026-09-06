@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { Shift } from "@/lib/types/database";
 import { cn } from "@/lib/utils/cn";
+import { formatLiveHours, liveMinutes } from "@/lib/attendance/shift-hours";
 import { formatClock } from "@/lib/utils/datetime";
 import { ShiftDialog } from "./shift-dialog";
 
@@ -36,7 +37,19 @@ export function ShiftRow({ shift }: { shift: Shift }) {
           {crossesMidnight ? <Badge tone="info">Lewat tengah malam</Badge> : null}
         </p>
         <p className="tabular mt-0.5 text-[12px] text-ink-muted">
-          {formatClock(shift.start_time)} – {formatClock(shift.end_time)} · minimal {shift.min_hosts} host
+          {formatClock(shift.start_time)} – {formatClock(shift.end_time)} · live{" "}
+          {formatLiveHours(
+            liveMinutes({
+              startTime: shift.start_time,
+              endTime: shift.end_time,
+              breakStart: shift.break_start,
+              breakEnd: shift.break_end,
+            }),
+          )}
+          {shift.break_start && shift.break_end
+            ? ` · istirahat ${formatClock(shift.break_start)}–${formatClock(shift.break_end)}`
+            : " · tanpa istirahat"}{" "}
+          · minimal {shift.min_hosts} host
         </p>
       </div>
 

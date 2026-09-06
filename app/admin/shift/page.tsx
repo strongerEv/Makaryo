@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Clock3 } from "lucide-react";
+import { Clock3, Settings2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import type { AppSettings, Shift } from "@/lib/types/database";
 import { OperationalSettingsForm } from "./operational-settings-form";
 import { ShiftDialog } from "./shift-dialog";
 import { ShiftRow } from "./shift-row";
+import { WorkHoursCard } from "./work-hours-card";
 
 export const metadata: Metadata = { title: "Pengaturan Shift" };
 
@@ -33,6 +34,30 @@ export default async function ShiftSettingsPage() {
         description="Atur pembagian shift, jumlah host minimum, dan jam operasional."
         action={<ShiftDialog mode="create" nextSortOrder={nextSortOrder} />}
       />
+
+      {shifts.filter((shift) => shift.is_active).length > 0 ? (
+        <section className="mb-5">
+          <div className="mb-3 flex items-start gap-3">
+            <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-coral-soft text-coral">
+              <Settings2 className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-lg font-extrabold tracking-tight text-ink">Pengaturan Jam Kerja</h2>
+              <p className="text-[13px] text-ink-muted">
+                Atur jam live dan istirahat tiap shift. Total live dihitung otomatis.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            {shifts
+              .filter((shift) => shift.is_active)
+              .map((shift) => (
+                <WorkHoursCard key={shift.id} shift={shift} />
+              ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Card className="p-0">

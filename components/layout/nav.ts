@@ -17,6 +17,7 @@ export type NavIconName =
   | "inbox"
   | "reports"
   | "shift"
+  | "swap"
   | "history"
   | "diagnostics"
   | "demo";
@@ -35,6 +36,7 @@ export const HOST_NAV: NavItem[] = [
   { href: "/absen", label: "Absen", icon: "attendance", primary: true },
   { href: "/omzet", label: "Omzet", icon: "wallet", primary: true },
   { href: "/pengajuan", label: "Pengajuan", icon: "requests" },
+  { href: "/tukar-shift", label: "Tukar Shift", icon: "swap" },
   { href: "/profil", label: "Profil", icon: "profile", primary: true },
 ];
 

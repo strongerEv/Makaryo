@@ -11,6 +11,7 @@ export type LiveTable =
   | "schedule_assignments"
   | "revenue_reports"
   | "leave_requests"
+  | "shift_swap_requests"
   | "notifications"
   | "profiles";
 

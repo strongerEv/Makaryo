@@ -28,6 +28,8 @@ export type Shift = {
   name: string;
   start_time: string;
   end_time: string;
+  break_start: string | null;
+  break_end: string | null;
   min_hosts: number;
   color: string;
   sort_order: number;
@@ -103,6 +105,20 @@ export type Attendance = {
   recorded_by: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ShiftSwapRequest = {
+  id: string;
+  requester_id: string;
+  requester_assignment_id: string;
+  target_id: string;
+  target_assignment_id: string;
+  reason: string | null;
+  status: LeaveStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
+  created_at: string;
 };
 
 export type SchedulePeriod = {
