@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckSquare, Pencil, Trash2, UserMinus, UserPlus, X } from "lucide-react";
+import { CalendarOff, CheckSquare, Pencil, Trash2, UserMinus, UserPlus, X } from "lucide-react";
 import { useActionState, useEffect, useMemo, useState } from "react";
 
 import {
@@ -13,6 +13,7 @@ import {
   AssignmentEditorSheet,
   type EditorTarget,
 } from "@/components/schedule/assignment-editor-sheet";
+import { LeaveDayEditor, type DayLeave } from "@/components/schedule/leave-day-editor";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -38,11 +39,13 @@ export function DayEditor({
   shifts,
   hosts,
   assignments,
+  leaves = [],
 }: {
   date: string;
   shifts: Shift[];
   hosts: Profile[];
   assignments: DayAssignment[];
+  leaves?: DayLeave[];
 }) {
   const [assignState, assign] = useActionState(assignHostAction, INITIAL);
   const [removeState, remove] = useActionState(removeAssignmentAction, INITIAL);
@@ -270,6 +273,18 @@ export function DayEditor({
           })}
         </div>
       )}
+
+      <section className="mt-4 rounded-[var(--radius-md)] border border-emerald/30 bg-emerald-soft/40 p-3.5">
+        <p className="mb-2 flex items-center gap-1.5 text-sm font-bold text-ink">
+          <CalendarOff className="size-4 text-emerald" aria-hidden />
+          Libur hari ini
+        </p>
+        <LeaveDayEditor
+          date={date}
+          hosts={hosts.map((host) => ({ id: host.id, name: host.full_name }))}
+          leaves={leaves}
+        />
+      </section>
 
       {diedit ? (
         <AssignmentEditorSheet

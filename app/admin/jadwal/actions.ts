@@ -615,3 +615,149 @@ export async function updateAssignmentAction(_prev: ActionState, formData: FormD
   revalidateSchedule();
   return { success: `Penugasan diperbarui: ${host.full_name} · ${(shift as Shift).name}.` };
 }
+
+/**
+ * Menandai satu host libur pada satu tanggal, langsung dari papan jadwal.
+ *
+ * Sebelumnya kolom libur hanya bisa terisi lewat generate otomatis atau lewat
+ * pengajuan host. Aksi ini membuat catatan libur yang sudah berstatus disetujui
+ * atas nama admin, jadi tidak perlu memutar lewat halaman approval.
+ */
+export async function addLeaveAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const parsed = z
+    .object({
+      hostId: z.string().uuid("Host wajib dipilih."),
+      workDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tanggal tidak valid."),
+      type: z.enum(["weekly_off", "urgent"]),
+      reason: z.string().trim().max(300).optional(),
+    })
+    .safeParse({
+      hostId: formData.get("hostId"),
+      workDate: formData.get("workDate"),
+      type: formData.get("type") ?? "weekly_off",
+      reason: formData.get("reason") ?? undefined,
+    });
+
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data tidak valid." };
+
+  const { hostId, workDate, type, reason } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: host } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("id", hostId)
+    .single();
+
+  if (!host) return { error: "Host tidak ditemukan." };
+
+  // Libur dan penugasan di hari yang sama saling bertentangan. Penugasannya
+  // tidak dihapus diam-diam — admin yang memutuskan mana yang benar.
+  const { data: bentrok } = await supabase
+    .from("schedule_assignments")
+    .select("id, shifts(name)")
+    .eq("host_id", hostId)
+    .eq("work_date", workDate);
+
+  if ((bentrok ?? []).length > 0) {
+    const nama = (bentrok ?? [])
+      .map((row) => (row.shifts as unknown as { name: string } | null)?.name ?? "shift")
+      .join(", ");
+    return {
+      error: `${host.full_name} masih dijadwalkan di ${nama} pada tanggal itu. Hapus penugasannya dulu.`,
+    };
+  }
+
+  const { error } = await supabase.from("leave_requests").insert({
+    host_id: hostId,
+    type,
+    requested_date: workDate,
+    reason: reason || "Ditandai admin dari papan jadwal.",
+    status: "approved",
+    reviewed_by: admin.id,
+    reviewed_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: `${host.full_name} sudah punya catatan libur jenis itu pada tanggal tersebut.` };
+    }
+    return { error: "Gagal menandai libur." };
+  }
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "leave_request",
+    action: "create",
+    targetUserId: hostId,
+    after: { work_date: workDate, type, status: "approved", source: "papan jadwal" },
+  });
+
+  await notifyUsers({
+    userIds: [hostId],
+    type: "approval",
+    title: "Kamu ditandai libur",
+    body: `Admin menandaimu libur pada ${formatDate(workDate)}.`,
+    link: "/jadwal",
+  });
+
+  revalidateSchedule();
+  revalidatePath("/pengajuan");
+  revalidatePath("/admin/approval");
+
+  return { success: `${host.full_name} ditandai libur ${formatDate(workDate)}.` };
+}
+
+/** Mencabut tanda libur satu host pada satu tanggal. */
+export async function removeLeaveAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const leaveId = String(formData.get("leaveId") ?? "");
+  if (!leaveId) return { error: "Catatan libur tidak dikenal." };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("leave_requests")
+    .select("id, host_id, requested_date, type, status, profiles!leave_requests_host_id_fkey(full_name)")
+    .eq("id", leaveId)
+    .single();
+
+  if (!before) return { error: "Catatan libur tidak ditemukan." };
+
+  // Dihapus, bukan ditolak: kunci unik (host, jenis, tanggal) membuat baris
+  // berstatus ditolak tetap memblokir penandaan ulang di tanggal yang sama.
+  const { error } = await supabase.from("leave_requests").delete().eq("id", leaveId);
+  if (error) return { error: "Gagal mencabut tanda libur." };
+
+  const nama =
+    (before.profiles as unknown as { full_name: string } | null)?.full_name ?? "Host";
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "leave_request",
+    action: "delete",
+    entityId: leaveId,
+    targetUserId: before.host_id as string,
+    before: {
+      work_date: before.requested_date,
+      type: before.type,
+      status: before.status,
+    },
+  });
+
+  await notifyUsers({
+    userIds: [before.host_id as string],
+    type: "approval",
+    title: "Tanda libur dicabut",
+    body: `Liburmu pada ${formatDate(before.requested_date as string)} dicabut admin. Cek jadwal terbarumu.`,
+    link: "/jadwal",
+  });
+
+  revalidateSchedule();
+  revalidatePath("/pengajuan");
+  revalidatePath("/admin/approval");
+
+  return { success: `Tanda libur ${nama} dicabut.` };
+}

@@ -96,7 +96,7 @@ export default async function AdminSchedulePage({
     supabase.from("schedule_periods").select("*").eq("start_date", monthStart).eq("end_date", monthEnd).maybeSingle(),
     supabase
       .from("leave_requests")
-      .select("host_id, requested_date, type, profiles!leave_requests_host_id_fkey(full_name)")
+      .select("id, host_id, requested_date, type, profiles!leave_requests_host_id_fkey(full_name)")
       .eq("status", "approved")
       .gte("requested_date", rangeStart)
       .lte("requested_date", rangeEnd),
@@ -110,12 +110,17 @@ export default async function AdminSchedulePage({
   const leaves: WeekLeave[] = (leaveRows ?? []).map((row) => {
     const profile = row.profiles as unknown as { full_name: string } | null;
     return {
+      id: row.id as string,
       hostId: row.host_id as string,
       hostName: profile?.full_name ?? "Host",
       date: row.requested_date as string,
       type: row.type as LeaveType,
     };
   });
+
+  const dayLeaves = leaves
+    .filter((row) => row.date === selectedDate)
+    .map((row) => ({ id: row.id, hostId: row.hostId, hostName: row.hostName, type: row.type }));
 
   const draftCount = assignments.filter((row) => row.status === "draft").length;
   const publishedCount = assignments.filter((row) => row.status === "published").length;
@@ -261,6 +266,7 @@ export default async function AdminSchedulePage({
               status: row.status,
               source: row.source,
             }))}
+            leaves={dayLeaves}
           />
         </div>
       ) : (
@@ -296,6 +302,7 @@ export default async function AdminSchedulePage({
               status: row.status,
               source: row.source,
             }))}
+            leaves={dayLeaves}
           />
         </div>
       )}

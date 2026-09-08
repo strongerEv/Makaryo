@@ -17,6 +17,7 @@ export type WeekAssignment = {
 };
 
 export type WeekLeave = {
+  id: string;
   hostId: string;
   hostName: string;
   date: string;
@@ -51,6 +52,7 @@ export function WeekBoard({
   selectedDate,
   onEdit,
   onAdd,
+  onEditLeave,
 }: {
   dates: string[];
   shifts: Shift[];
@@ -64,6 +66,8 @@ export function WeekBoard({
   onEdit?: (assignment: WeekAssignment) => void;
   /** Diisi admin: membuka editor tambah untuk satu shift di satu tanggal. */
   onAdd?: (date: string, shiftId: string) => void;
+  /** Diisi admin: membuka pengaturan libur untuk satu tanggal. */
+  onEditLeave?: (date: string) => void;
 }) {
   const today = todayInJakarta();
 
@@ -204,17 +208,30 @@ export function WeekBoard({
             </div>
 
             <div className="border-t border-line pt-2.5">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold text-ink-muted">
-                <CalendarOff className="size-3.5" aria-hidden />
-                Libur hari ini
-              </p>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-[11px] font-bold text-ink-muted">
+                  <CalendarOff className="size-3.5" aria-hidden />
+                  Libur hari ini
+                </p>
+                {onEditLeave ? (
+                  <button
+                    type="button"
+                    onClick={() => onEditLeave(date)}
+                    className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold text-emerald transition-colors hover:bg-emerald-soft"
+                    title="Atur siapa yang libur hari ini"
+                  >
+                    <Plus className="size-3" aria-hidden />
+                    Libur
+                  </button>
+                ) : null}
+              </div>
 
               {izin.length === 0 && tanpaJadwal.length === 0 ? (
                 <p className="text-[11px] text-ink-muted">Semua host bertugas.</p>
               ) : (
                 <ul className="flex flex-wrap gap-1">
                   {izin.map((item) => (
-                    <li key={`${item.hostId}-izin`}>
+                    <li key={item.id}>
                       <Badge tone="warning" className="text-[11px]">
                         {item.hostName.split(" ")[0]} · {item.type === "urgent" ? "izin" : "libur"}
                       </Badge>

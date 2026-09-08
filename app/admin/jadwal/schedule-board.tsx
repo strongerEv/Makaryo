@@ -9,6 +9,7 @@ import {
   type EditorTarget,
 } from "@/components/schedule/assignment-editor-sheet";
 import { MonthCalendar, type CalendarItem } from "@/components/schedule/month-calendar";
+import { LeaveDaySheet } from "@/components/schedule/leave-day-editor";
 import {
   WeekBoard,
   type WeekAssignment,
@@ -50,6 +51,7 @@ export function EditableWeekBoard({
   weekHosts: WeekHost[];
 }) {
   const { target, bukaEdit, bukaTambah, tutup, editorShifts } = useAssignmentEditor(shared);
+  const [tanggalLibur, setTanggalLibur] = useState<string | null>(null);
 
   const weekAssignments: WeekAssignment[] = shared.assignments;
 
@@ -65,6 +67,7 @@ export function EditableWeekBoard({
         selectedDate={shared.selectedDate}
         onEdit={(item) => bukaEdit(item.id)}
         onAdd={bukaTambah}
+        onEditLeave={setTanggalLibur}
       />
 
       {target ? (
@@ -73,6 +76,17 @@ export function EditableWeekBoard({
           shifts={editorShifts}
           hosts={shared.hosts}
           onClose={tutup}
+        />
+      ) : null}
+
+      {tanggalLibur ? (
+        <LeaveDaySheet
+          date={tanggalLibur}
+          hosts={shared.hosts}
+          leaves={leaves
+            .filter((row) => row.date === tanggalLibur)
+            .map((row) => ({ id: row.id, hostId: row.hostId, hostName: row.hostName, type: row.type }))}
+          onClose={() => setTanggalLibur(null)}
         />
       ) : null}
     </>
