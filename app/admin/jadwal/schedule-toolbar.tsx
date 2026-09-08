@@ -9,13 +9,22 @@ import {
   resetScheduleAction,
   type ActionState,
 } from "@/app/admin/jadwal/actions";
-import { ResetScheduleDialog } from "@/app/admin/jadwal/reset-schedule-dialog";
+import { ResetScheduleDialog, type MonthCount } from "@/app/admin/jadwal/reset-schedule-dialog";
 import { Alert } from "@/components/ui/alert";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 const INITIAL: ActionState = {};
 
-export function ScheduleToolbar({ month, draftCount }: { month: string; draftCount: number }) {
+export function ScheduleToolbar({
+  month,
+  draftCount,
+  monthCounts,
+}: {
+  month: string;
+  draftCount: number;
+  /** Isi tiap bulan, supaya dialog reset bisa menunjukkan dampaknya lebih dulu. */
+  monthCounts: Record<string, MonthCount>;
+}) {
   const [generateState, generate] = useActionState(generateDraftAction, INITIAL);
   const [publishState, publish] = useActionState(publishScheduleAction, INITIAL);
   const [resetState, reset] = useActionState(resetScheduleAction, INITIAL);
@@ -44,7 +53,12 @@ export function ScheduleToolbar({ month, draftCount }: { month: string; draftCou
           </SubmitButton>
         </form>
 
-        <ResetScheduleDialog defaultMonth={month} state={resetState} formAction={reset} />
+        <ResetScheduleDialog
+          defaultMonth={month}
+          counts={monthCounts}
+          state={resetState}
+          formAction={reset}
+        />
       </div>
 
       {error ? <Alert tone="error">{error}</Alert> : null}

@@ -38,6 +38,13 @@ export function recentMonths(count = 12) {
   return months;
 }
 
+/** Menggeser bulan `YYYY-MM` sejauh `delta` bulan. */
+export function shiftMonth(month: string, delta: number) {
+  const [year, monthPart] = month.split("-").map(Number);
+  const date = new Date(Date.UTC(year, monthPart - 1 + delta, 1));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
 /**
  * Pilihan bulan untuk penyaring atau formulir.
  *

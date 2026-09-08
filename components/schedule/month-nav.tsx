@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { monthLabel } from "@/lib/utils/period";
-
-function shiftMonth(month: string, delta: number) {
-  const [year, monthPart] = month.split("-").map(Number);
-  const date = new Date(Date.UTC(year, monthPart - 1 + delta, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
+import { monthLabel, shiftMonth } from "@/lib/utils/period";
 
 /** Navigasi bulan sebelumnya / berikutnya sebagai tautan biasa. */
 export function MonthNav({

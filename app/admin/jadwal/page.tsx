@@ -19,10 +19,11 @@ import { createClient } from "@/lib/supabase/server";
 import type { LeaveType, Profile, SchedulePeriod, Shift } from "@/lib/types/database";
 import { cn } from "@/lib/utils/cn";
 import { formatDate, todayInJakarta } from "@/lib/utils/datetime";
-import { addDays, currentMonth, eachDate, monthRange, weekStart } from "@/lib/utils/period";
+import { addDays, currentMonth, eachDate, monthRange, shiftMonth, weekStart } from "@/lib/utils/period";
 import { LiveSync } from "@/lib/realtime/live-sync";
 import { DayEditor } from "./day-editor";
 import { ScheduleToolbar } from "./schedule-toolbar";
+import type { MonthCount } from "./reset-schedule-dialog";
 
 export const metadata: Metadata = { title: "Jadwal" };
 
@@ -76,6 +77,7 @@ export default async function AdminSchedulePage({
     { data: hostRows },
     { data: periodRow },
     { data: leaveRows },
+    { data: monthCountRows },
   ] = await Promise.all([
     supabase
       .from("schedule_assignments")
@@ -100,6 +102,11 @@ export default async function AdminSchedulePage({
       .eq("status", "approved")
       .gte("requested_date", rangeStart)
       .lte("requested_date", rangeEnd),
+    // Ringkasan per bulan untuk dialog reset — hanya angkanya, bukan barisnya.
+    supabase.rpc("schedule_month_counts", {
+      from_month: monthRange(shiftMonth(currentMonth(), -12)).start,
+      to_month: monthRange(shiftMonth(currentMonth(), 3)).start,
+    }),
   ]);
 
   const assignments = (assignmentRows ?? []) as unknown as AssignmentRow[];
@@ -121,6 +128,12 @@ export default async function AdminSchedulePage({
   const dayLeaves = leaves
     .filter((row) => row.date === selectedDate)
     .map((row) => ({ id: row.id, hostId: row.hostId, hostName: row.hostName, type: row.type }));
+
+  const monthCounts: Record<string, MonthCount> = Object.fromEntries(
+    ((monthCountRows ?? []) as { month: string; draft_count: number; published_count: number }[]).map(
+      (row) => [row.month, { draft: row.draft_count, published: row.published_count }],
+    ),
+  );
 
   const draftCount = assignments.filter((row) => row.status === "draft").length;
   const publishedCount = assignments.filter((row) => row.status === "published").length;
@@ -173,7 +186,7 @@ export default async function AdminSchedulePage({
       <PageHeader
         title="Jadwal"
         description="Susun jadwal seluruh host, lalu publish agar terlihat oleh mereka."
-        action={<ScheduleToolbar month={month} draftCount={draftCount} />}
+        action={<ScheduleToolbar month={month} draftCount={draftCount} monthCounts={monthCounts} />}
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
