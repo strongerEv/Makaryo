@@ -109,6 +109,8 @@ export type Attendance = {
   late_minutes: number;
   worked_minutes: number;
   auto_closed: boolean;
+  /** Terkunci saat baris dibuat; tidak berubah walau jadwalnya kemudian dihapus. */
+  was_scheduled: boolean;
   note: string | null;
   recorded_by: string | null;
   created_at: string;
