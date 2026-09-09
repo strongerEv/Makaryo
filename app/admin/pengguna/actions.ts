@@ -4,14 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { logAudit } from "@/lib/auth/audit";
-import { requireAdmin } from "@/lib/auth/session";
+import { requireAdmin, requireSuperAdmin } from "@/lib/auth/session";
 import {
   createAdminClient,
   isServiceRoleConfigured,
   SERVICE_ROLE_MISSING_MESSAGE,
 } from "@/lib/supabase/admin";
 import { todayInJakarta } from "@/lib/utils/datetime";
-import type { Profile } from "@/lib/types/database";
+import { ROLE_LABEL, type Profile, type UserRole } from "@/lib/types/database";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -22,7 +22,7 @@ const createUserSchema = z.object({
   email: z.string().trim().email("Format email tidak valid."),
   password: z.string().min(8, "Kata sandi awal minimal 8 karakter."),
   phone: optionalText,
-  role: z.enum(["host", "admin"]),
+  role: z.enum(["host", "admin", "super_admin"]),
   joinDate: z.string().trim().optional(),
   weeklyDayOffQuota: z.coerce.number().int().min(0).max(7),
 });
@@ -207,6 +207,12 @@ export async function createUserAction(_prev: ActionState, formData: FormData): 
   });
   if (!parsed.success) return fail(firstIssue(parsed.error));
 
+  // Admin biasa boleh menambah host, tetapi tidak boleh langsung membuat akun
+  // admin — pengangkatan peran adalah wewenang super admin.
+  if (parsed.data.role !== "host" && admin.role !== "super_admin") {
+    return fail("Hanya super admin yang bisa membuat akun admin. Buat sebagai host, lalu minta super admin mengubah perannya.");
+  }
+
   if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
 
   const client = createAdminClient();
@@ -374,4 +380,73 @@ export async function deleteUserAction(_prev: ActionState, formData: FormData): 
 
   revalidateUserPages();
   return { success: `Akun ${before.full_name} dihapus permanen.` };
+}
+
+
+/**
+ * Mengubah peran satu pengguna.
+ *
+ * Hanya super admin. Admin biasa tetap bisa menambah dan mengelola host, tetapi
+ * tidak boleh mengangkat siapa pun menjadi admin — termasuk dirinya sendiri.
+ * Pembatasannya ditegakkan di sini karena pengelolaan pengguna memakai klien
+ * service role, yang melewati Row Level Security.
+ */
+export async function updateUserRoleAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const superAdmin = await requireSuperAdmin();
+
+  const parsed = z
+    .object({
+      userId: z.string().uuid("Pengguna tidak dikenal."),
+      role: z.enum(["host", "admin", "super_admin"]),
+    })
+    .safeParse({ userId: formData.get("userId"), role: formData.get("role") });
+
+  if (!parsed.success) return fail(firstIssue(parsed.error));
+
+  const { userId, role } = parsed.data;
+  if (!isServiceRoleConfigured()) return fail(SERVICE_ROLE_MISSING_MESSAGE);
+
+  const client = createAdminClient();
+  const { data: before } = await client
+    .from("profiles")
+    .select("id, full_name, role")
+    .eq("id", userId)
+    .single();
+
+  if (!before) return fail("Pengguna tidak ditemukan.");
+  if (before.role === role) return fail(`${before.full_name} memang sudah berperan ${ROLE_LABEL[role]}.`);
+
+  // Super admin terakhir tidak boleh diturunkan — kalau tidak, tidak ada lagi
+  // yang bisa mengangkat orang lain dan aplikasi terkunci selamanya.
+  if (before.role === "super_admin" && role !== "super_admin") {
+    const { count } = await client
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "super_admin")
+      .eq("account_status", "active");
+
+    if ((count ?? 0) <= 1) {
+      return fail("Ini super admin terakhir. Angkat orang lain jadi super admin dulu sebelum menurunkannya.");
+    }
+  }
+
+  const { error } = await client.from("profiles").update({ role }).eq("id", userId);
+  if (error) return fail(`Gagal mengubah peran: ${error.message}`);
+
+  await logAudit({
+    actorId: superAdmin.id,
+    entity: "user",
+    action: "update",
+    entityId: userId,
+    targetUserId: userId,
+    before: { role: before.role },
+    after: { role },
+  });
+
+  revalidateUserPages();
+  revalidatePath(`/admin/pengguna/${userId}`);
+
+  return {
+    success: `${before.full_name} kini berperan ${ROLE_LABEL[role as UserRole]}.`,
+  };
 }

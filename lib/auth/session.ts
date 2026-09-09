@@ -4,7 +4,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
-import type { Profile } from "@/lib/types/database";
+import { isAdminRole, type Profile } from "@/lib/types/database";
 
 /** Profil pengguna yang sedang masuk, atau null bila belum masuk. */
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
@@ -28,9 +28,23 @@ export async function requireActiveProfile(): Promise<Profile> {
   return profile;
 }
 
+/** Admin maupun super admin — keduanya boleh membuka area admin. */
 export async function requireAdmin(): Promise<Profile> {
   const profile = await requireActiveProfile();
-  if (profile.role !== "admin") redirect("/beranda");
+  if (!isAdminRole(profile.role)) redirect("/beranda");
+  return profile;
+}
+
+/**
+ * Hanya super admin.
+ *
+ * Dipakai aksi yang menggeser peran pengguna. Admin biasa boleh menambah dan
+ * mengelola host, tetapi tidak boleh mengangkat siapa pun jadi admin — termasuk
+ * dirinya sendiri.
+ */
+export async function requireSuperAdmin(): Promise<Profile> {
+  const profile = await requireActiveProfile();
+  if (profile.role !== "super_admin") redirect("/admin/dashboard");
   return profile;
 }
 
@@ -43,5 +57,5 @@ export async function requireHost(): Promise<Profile> {
 /** Halaman beranda sesuai peran dan status akun. */
 export function homePathFor(profile: Pick<Profile, "role" | "account_status">) {
   if (profile.account_status !== "active") return "/menunggu-verifikasi";
-  return profile.role === "admin" ? "/admin/dashboard" : "/beranda";
+  return isAdminRole(profile.role) ? "/admin/dashboard" : "/beranda";
 }

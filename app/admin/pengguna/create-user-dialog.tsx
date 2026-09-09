@@ -12,7 +12,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 
 const INITIAL: ActionState = {};
 
-export function CreateUserDialog() {
+export function CreateUserDialog({ bisaAturPeran = false }: { bisaAturPeran?: boolean }) {
   const [open, setOpen] = useState(false);
   const [state, formAction] = useActionState(createUserAction, INITIAL);
 
@@ -61,12 +61,16 @@ export function CreateUserDialog() {
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Peran" htmlFor="new-role" required>
-              <Select id="new-role" name="role" defaultValue="host">
+              <Select id="new-role" name="role" defaultValue="host" disabled={!bisaAturPeran}>
                 <option value="host">Host</option>
-                <option value="admin">Admin</option>
+                {bisaAturPeran ? <option value="admin">Admin</option> : null}
+                {bisaAturPeran ? <option value="super_admin">Super Admin</option> : null}
               </Select>
             </Field>
-            <Field label="Tanggal join" htmlFor="new-joinDate">
+            <Field
+              label="Tanggal join"
+              htmlFor="new-joinDate"
+            >
               <Input id="new-joinDate" name="joinDate" type="date" />
             </Field>
             <Field label="Jatah libur / minggu" htmlFor="new-quota">

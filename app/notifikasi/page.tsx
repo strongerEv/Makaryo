@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireActiveProfile } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/types/database";
 import type { AppNotification } from "@/lib/types/database";
 import { formatDateTime } from "@/lib/utils/datetime";
 import { LiveSync } from "@/lib/realtime/live-sync";
@@ -28,7 +29,7 @@ export default async function NotificationsPage() {
 
   const notifications = (data ?? []) as AppNotification[];
   const unread = notifications.filter((item) => !item.read_at).length;
-  const isAdmin = profile.role === "admin";
+  const isAdmin = isAdminRole(profile.role);
 
   return (
     <AppShell

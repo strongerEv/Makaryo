@@ -5,6 +5,7 @@ import { buildAttendancePdf } from "@/lib/export/pdf";
 import { fetchAttendanceReport } from "@/lib/export/queries";
 import { createClient } from "@/lib/supabase/server";
 import { currentMonth } from "@/lib/utils/period";
+import { isAdminRole } from "@/lib/types/database";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: "Tidak diizinkan." }, { status: 401 });
 
   const { data: profile } = await supabase.from("profiles").select("role, account_status").eq("id", user.id).single();
-  if (profile?.role !== "admin" || profile.account_status !== "active") {
+  if (!profile || !isAdminRole(profile.role) || profile.account_status !== "active") {
     return NextResponse.json({ error: "Hanya admin yang dapat mengunduh laporan." }, { status: 403 });
   }
 

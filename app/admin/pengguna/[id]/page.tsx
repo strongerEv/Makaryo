@@ -14,12 +14,14 @@ import { getMonthlyAttendanceStats, getMonthlyRevenueTotal } from "@/lib/attenda
 import { requireAdmin } from "@/lib/auth/session";
 import { signAvatarUrl } from "@/lib/storage/avatar";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/types/database";
 import type { Profile } from "@/lib/types/database";
 import { ROLE_LABEL } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils/format";
 import { formatDate, formatDateTime } from "@/lib/utils/datetime";
 import { DangerZone } from "./danger-zone";
 import { EditUserForm } from "./edit-user-form";
+import { RoleForm } from "./role-form";
 
 export const metadata: Metadata = { title: "Detail Pengguna" };
 
@@ -54,7 +56,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
       <div className="mb-5 flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
         <Avatar name={user.full_name} src={avatarUrl} size="lg" />
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={user.role === "admin" ? "primary" : "neutral"}>{ROLE_LABEL[user.role]}</Badge>
+          <Badge tone={isAdminRole(user.role) ? "primary" : "neutral"}>{ROLE_LABEL[user.role]}</Badge>
           <AccountStatusBadge status={user.account_status} />
           <span className="text-[12px] text-ink-muted">
             Terdaftar {formatDate(user.created_at)}
@@ -115,6 +117,15 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               </div>
             </dl>
           </Card>
+
+          {admin.role === "super_admin" ? (
+            <RoleForm
+              userId={user.id}
+              userName={user.full_name}
+              currentRole={user.role}
+              isSelf={isSelf}
+            />
+          ) : null}
 
           <DangerZone user={user} isSelf={isSelf} />
         </div>

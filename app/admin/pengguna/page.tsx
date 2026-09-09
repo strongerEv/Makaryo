@@ -39,7 +39,7 @@ export default async function AdminUsersPage({
 
   const statuses = STATUS_FILTERS[status];
   if (statuses) query = query.in("account_status", statuses);
-  if (role === "host" || role === "admin") query = query.eq("role", role);
+  if (role === "host" || role === "admin" || role === "super_admin") query = query.eq("role", role);
   if (q.trim()) query = query.or(`full_name.ilike.%${q.trim()}%,email.ilike.%${q.trim()}%`);
 
   const [{ data: rows }, { count: totalCount }, { count: pendingCount }, { count: activeHostCount }] =
@@ -67,7 +67,7 @@ export default async function AdminUsersPage({
       <PageHeader
         title="Kelola Pengguna"
         description="Verifikasi pendaftar, tambah akun baru, dan kelola data karyawan."
-        action={<CreateUserDialog />}
+        action={<CreateUserDialog bisaAturPeran={admin.role === "super_admin"} />}
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -97,6 +97,7 @@ export default async function AdminUsersPage({
                 <option value="all">Semua peran</option>
                 <option value="host">Host</option>
                 <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
               </Select>
             </Field>
             <div className="flex items-end">

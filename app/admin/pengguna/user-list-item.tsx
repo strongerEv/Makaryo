@@ -16,6 +16,7 @@ import { Field, Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { buttonClass } from "@/components/ui/button";
+import { isAdminRole } from "@/lib/types/database";
 import type { Profile } from "@/lib/types/database";
 import { ROLE_LABEL } from "@/lib/types/database";
 import { formatDateShort } from "@/lib/utils/datetime";
@@ -52,7 +53,7 @@ export function UserListItem({
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 lg:mt-0 lg:block">
-        <Badge tone={user.role === "admin" ? "primary" : "neutral"}>{ROLE_LABEL[user.role]}</Badge>
+        <Badge tone={isAdminRole(user.role) ? "primary" : "neutral"}>{ROLE_LABEL[user.role]}</Badge>
         <span className="lg:hidden">
           <AccountStatusBadge status={user.account_status} />
         </span>

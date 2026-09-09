@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "host";
+export type UserRole = "super_admin" | "admin" | "host";
 export type AccountStatus = "pending" | "active" | "rejected" | "suspended";
 export type EmploymentStatus = "active" | "inactive" | "long_leave";
 
@@ -75,9 +75,17 @@ export const EMPLOYMENT_STATUS_LABEL: Record<EmploymentStatus, string> = {
 };
 
 export const ROLE_LABEL: Record<UserRole, string> = {
+  super_admin: "Super Admin",
   admin: "Admin",
   host: "Host",
 };
+
+/** Peran yang boleh membuka area admin. */
+export const ADMIN_ROLES: UserRole[] = ["super_admin", "admin"];
+
+export function isAdminRole(role: UserRole) {
+  return ADMIN_ROLES.includes(role);
+}
 
 export type AttendanceStatus = "on_time" | "late" | "absent";
 export type ScheduleStatus = "draft" | "published" | "cancelled";

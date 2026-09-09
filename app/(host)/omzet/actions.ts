@@ -7,6 +7,7 @@ import { logAudit } from "@/lib/auth/audit";
 import { requireActiveProfile } from "@/lib/auth/session";
 import { uploadPhoto } from "@/lib/storage/photos";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/types/database";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -38,7 +39,7 @@ export async function submitRevenueAction(_prev: ActionState, formData: FormData
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Data tidak valid." };
 
   // Host hanya boleh melaporkan omzetnya sendiri; admin boleh atas nama host lain.
-  const hostId = profile.role === "admin" ? (parsed.data.hostId ?? profile.id) : profile.id;
+  const hostId = isAdminRole(profile.role) ? (parsed.data.hostId ?? profile.id) : profile.id;
   const supabase = await createClient();
 
   let proofPath: string | null = null;
@@ -96,7 +97,7 @@ export async function updateRevenueAction(_prev: ActionState, formData: FormData
   const supabase = await createClient();
   const { data: before } = await supabase.from("revenue_reports").select("*").eq("id", reportId).single();
   if (!before) return { error: "Laporan tidak ditemukan." };
-  if (profile.role !== "admin" && before.host_id !== profile.id) {
+  if (!isAdminRole(profile.role) && before.host_id !== profile.id) {
     return { error: "Kamu hanya bisa mengubah laporan milikmu sendiri." };
   }
 
