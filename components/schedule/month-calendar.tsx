@@ -29,6 +29,9 @@ export function MonthCalendar({
   selectedDate,
   emptyLabel = "Libur",
   onSelectItem,
+  markedIds,
+  onToggleMark,
+  onToggleDay,
 }: {
   month: string;
   items: Record<string, CalendarItem[]>;
@@ -38,7 +41,16 @@ export function MonthCalendar({
   emptyLabel?: string;
   /** Diisi admin: mengklik satu entri membuka editornya. */
   onSelectItem?: (itemId: string) => void;
+  /** Mode tandai: id yang sedang tercentang. */
+  markedIds?: string[];
+  /** Mode tandai: mengklik entri menandainya, bukan membuka editor. */
+  onToggleMark?: (itemId: string) => void;
+  /** Mode tandai: menandai seluruh entri satu hari sekaligus. */
+  onToggleDay?: (date: string) => void;
 }) {
+  const menandai = Boolean(onToggleMark);
+  const tertandai = new Set(markedIds ?? []);
+
   const { start, end } = monthRange(month);
   const dates = eachDate(start, end);
   const leadingBlanks = weekdayIndex(start);
@@ -88,11 +100,22 @@ export function MonthCalendar({
             >
               {/* Seluruh sel tetap bisa diklik untuk memilih hari; entri jadwal
                   berada di lapisan atasnya agar kliknya membuka editor. */}
-              {href ? (
+              {href && !menandai ? (
                 <Link href={href} className="absolute inset-0 rounded-[14px]" aria-label={`Pilih ${date}`} />
               ) : null}
 
-              <span className="relative pointer-events-none">{nomor}</span>
+              {menandai && dayItems.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => onToggleDay?.(date)}
+                  className="relative self-start rounded-full"
+                  title={`Tandai semua ${dayItems.length} jadwal tanggal ini`}
+                >
+                  {nomor}
+                </button>
+              ) : (
+                <span className="pointer-events-none relative">{nomor}</span>
+              )}
 
               <span className="pointer-events-none relative flex flex-1 flex-col gap-1 overflow-hidden">
                 {dayItems.length === 0 ? (
@@ -104,6 +127,26 @@ export function MonthCalendar({
                       TONES[item.tone ?? "primary"] ?? TONES.primary,
                       item.muted && "opacity-60",
                     );
+
+                    if (menandai) {
+                      const dipilih = tertandai.has(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => onToggleMark?.(item.id)}
+                          className={cn(
+                            gaya,
+                            "pointer-events-auto transition-shadow",
+                            dipilih ? "opacity-100 ring-2 ring-primary" : "opacity-70 hover:ring-2 hover:ring-primary/40",
+                          )}
+                          title={`${dipilih ? "Batal tandai" : "Tandai"} ${item.label}`}
+                        >
+                          {dipilih ? "\u2713 " : ""}
+                          {item.label}
+                        </button>
+                      );
+                    }
 
                     return onSelectItem ? (
                       <button

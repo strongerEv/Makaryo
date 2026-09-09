@@ -336,22 +336,31 @@ export async function resetScheduleAction(_prev: ActionState, formData: FormData
   const { start, end } = monthRange(month);
   const supabase = await createClient();
 
-  let existingQuery = supabase
-    .from("schedule_assignments")
-    .select("id, host_id, status")
-    .gte("work_date", start)
-    .lte("work_date", end);
+  // Penghapusan dijalankan satu perintah di database. Versi sebelumnya membaca
+  // seluruh id lebih dulu lalu menghapus lewat `id in (...)`; cara itu merakit
+  // URL panjang berisi puluhan uuid dan menyisakan celah bila baris berubah di
+  // antara pembacaan dan penghapusan.
+  const { data, error } = await supabase.rpc("reset_schedule_month", {
+    period_start: start,
+    period_end: end,
+    only_draft: scope === "draft",
+  });
 
-  if (scope === "draft") existingQuery = existingQuery.eq("status", "draft");
+  if (error) {
+    console.error("Gagal mereset jadwal", { month, scope, error });
+    return { error: `Gagal menghapus jadwal: ${error.message}` };
+  }
 
-  const { data: existing, error: readError } = await existingQuery;
-  if (readError) return { error: "Gagal membaca jadwal periode ini." };
+  const hasil = (data ?? [])[0] as
+    | { deleted_total: number; deleted_published: number; host_ids: string[] | null }
+    | undefined;
 
-  const rows = existing ?? [];
-  if (rows.length === 0) {
+  const terhapus = hasil?.deleted_total ?? 0;
+
+  if (terhapus === 0) {
+    // Bedakan "memang kosong" dari "semuanya sudah terbit", supaya admin tahu
+    // cukup mengganti cakupan alih-alih mengira fiturnya rusak.
     if (scope === "draft") {
-      // Bedakan "memang kosong" dari "semuanya sudah terbit", supaya admin tahu
-      // cukup mengganti cakupan alih-alih mengira fiturnya rusak.
       const { count: terbit } = await supabase
         .from("schedule_assignments")
         .select("id", { count: "exact", head: true })
@@ -366,45 +375,16 @@ export async function resetScheduleAction(_prev: ActionState, formData: FormData
             'Pilih cakupan "Semua jadwal" bila memang mau menghapusnya.',
         };
       }
-
-      return { error: `Tidak ada jadwal sama sekali di ${monthLabel(month)}.` };
     }
 
-    return { error: `Tidak ada jadwal di ${monthLabel(month)}.` };
+    return { error: `Tidak ada jadwal yang cocok untuk dihapus di ${monthLabel(month)}.` };
   }
 
-  const { error: deleteError } = await supabase
-    .from("schedule_assignments")
-    .delete()
-    .in(
-      "id",
-      rows.map((row) => row.id as string),
-    );
-
-  if (deleteError) return { error: "Gagal menghapus jadwal. Coba lagi." };
-
-  const publishedRemoved = rows.filter((row) => row.status === "published");
-
-  // Periode dikembalikan ke draft hanya bila tidak ada lagi jadwal terbit di dalamnya.
-  const { count: sisaPublished } = await supabase
-    .from("schedule_assignments")
-    .select("id", { count: "exact", head: true })
-    .gte("work_date", start)
-    .lte("work_date", end)
-    .eq("status", "published");
-
-  if ((sisaPublished ?? 0) === 0) {
-    await supabase
-      .from("schedule_periods")
-      .update({ status: "draft", published_at: null, published_by: null })
-      .eq("start_date", start)
-      .eq("end_date", end);
-  }
+  const hostIds = hasil?.host_ids ?? [];
 
   // Host yang jadwal terbitnya ikut terhapus perlu tahu, karena shift yang
   // sudah mereka lihat di aplikasi tiba-tiba hilang.
-  if (publishedRemoved.length > 0) {
-    const hostIds = [...new Set(publishedRemoved.map((row) => row.host_id as string))];
+  if (hostIds.length > 0) {
     await notifyUsers({
       userIds: hostIds,
       type: "schedule_published",
@@ -421,19 +401,17 @@ export async function resetScheduleAction(_prev: ActionState, formData: FormData
     before: {
       period: month,
       scope,
-      assignments: rows.length,
-      published: publishedRemoved.length,
+      assignments: terhapus,
+      published: hasil?.deleted_published ?? 0,
     },
   });
 
   revalidateSchedule();
 
   const rincian =
-    publishedRemoved.length > 0
-      ? ` (${publishedRemoved.length} di antaranya sudah terbit)`
-      : "";
+    (hasil?.deleted_published ?? 0) > 0 ? ` (${hasil?.deleted_published} di antaranya sudah terbit)` : "";
 
-  return { success: `${rows.length} penugasan di ${monthLabel(month)} dihapus${rincian}.` };
+  return { success: `${terhapus} penugasan di ${monthLabel(month)} dihapus${rincian}.` };
 }
 
 /**

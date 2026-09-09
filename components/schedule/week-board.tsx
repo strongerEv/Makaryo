@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarOff, Plus, UserRound } from "lucide-react";
+import { CalendarOff, Check, Plus, UserRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { Shift } from "@/lib/types/database";
@@ -53,6 +53,9 @@ export function WeekBoard({
   onEdit,
   onAdd,
   onEditLeave,
+  markedIds,
+  onToggleMark,
+  onToggleDay,
 }: {
   dates: string[];
   shifts: Shift[];
@@ -68,7 +71,15 @@ export function WeekBoard({
   onAdd?: (date: string, shiftId: string) => void;
   /** Diisi admin: membuka pengaturan libur untuk satu tanggal. */
   onEditLeave?: (date: string) => void;
+  /** Mode tandai: id penugasan yang sedang tercentang. */
+  markedIds?: string[];
+  /** Mode tandai: mengklik chip menandainya, bukan membuka editor. */
+  onToggleMark?: (assignmentId: string) => void;
+  /** Mode tandai: menandai seluruh penugasan satu hari. */
+  onToggleDay?: (date: string) => void;
 }) {
+  const menandai = Boolean(onToggleMark);
+  const tertandai = new Set(markedIds ?? []);
   const today = todayInJakarta();
 
   return (
@@ -103,7 +114,16 @@ export function WeekBoard({
               isSelected ? "border-primary" : "border-line",
             )}
           >
-            {href ? (
+            {menandai ? (
+              <button
+                type="button"
+                onClick={() => onToggleDay?.(date)}
+                className="-m-1 flex items-baseline justify-between gap-2 rounded-[10px] p-1 text-left transition-colors hover:bg-primary-soft"
+                title="Tandai semua jadwal hari ini"
+              >
+                {judul}
+              </button>
+            ) : href ? (
               <a
                 href={href}
                 className="-m-1 flex items-baseline justify-between gap-2 rounded-[10px] p-1 transition-colors hover:bg-surface-muted"
@@ -131,7 +151,7 @@ export function WeekBoard({
                         <span className="tabular text-[11px] font-semibold text-ink-muted">
                           {formatClock(shift.start_time)}–{formatClock(shift.end_time)}
                         </span>
-                        {onAdd ? (
+                        {onAdd && !menandai ? (
                           <button
                             type="button"
                             onClick={() => onAdd(date, shift.id)}
@@ -173,6 +193,28 @@ export function WeekBoard({
                             </>
                           );
 
+                          const ditandai = tertandai.has(item.id);
+
+                          if (menandai) {
+                            return (
+                              <li key={item.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleMark?.(item.id)}
+                                  className={cn(
+                                    gaya,
+                                    "transition-shadow",
+                                    ditandai ? "ring-2 ring-primary" : "opacity-70 hover:ring-2 hover:ring-primary/40",
+                                  )}
+                                  title={`${ditandai ? "Batal tandai" : "Tandai"} ${item.hostName}`}
+                                >
+                                  {ditandai ? <Check className="size-3" aria-hidden /> : null}
+                                  {isiChip}
+                                </button>
+                              </li>
+                            );
+                          }
+
                           return (
                             <li key={item.id}>
                               {onEdit ? (
@@ -213,7 +255,7 @@ export function WeekBoard({
                   <CalendarOff className="size-3.5" aria-hidden />
                   Libur hari ini
                 </p>
-                {onEditLeave ? (
+                {onEditLeave && !menandai ? (
                   <button
                     type="button"
                     onClick={() => onEditLeave(date)}
