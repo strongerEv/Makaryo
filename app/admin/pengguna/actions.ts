@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { logAudit } from "@/lib/auth/audit";
@@ -423,12 +424,15 @@ export async function deleteUserAction(_prev: ActionState, formData: FormData): 
 
   revalidateUserPages();
 
-  return {
-    success:
-      history.total > 0
-        ? `Akun ${before.full_name} dihapus permanen beserta ${rincianRiwayat(history)}.`
-        : `Akun ${before.full_name} dihapus permanen.`,
-  };
+  // Admin sedang berada di halaman detail orang yang baru saja dihapus, jadi
+  // tetap di sana berarti memuat profil yang tidak ada lagi — halamannya kosong.
+  // Dialihkan ke daftar pengguna, membawa pesan hasilnya.
+  const pesan =
+    history.total > 0
+      ? `Akun ${before.full_name} dihapus permanen beserta ${rincianRiwayat(history)}.`
+      : `Akun ${before.full_name} dihapus permanen.`;
+
+  redirect(`/admin/pengguna?dihapus=${encodeURIComponent(pesan)}`);
 }
 
 

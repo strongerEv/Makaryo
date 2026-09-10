@@ -13,12 +13,13 @@ import { createClient } from "@/lib/supabase/server";
 import type { AccountStatus, Profile } from "@/lib/types/database";
 import { LiveSync } from "@/lib/realtime/live-sync";
 import { CreateUserDialog } from "./create-user-dialog";
+import { DeletedDialog } from "./deleted-dialog";
 import { UserFilterTabs } from "./user-filter-tabs";
 import { UserListItem } from "./user-list-item";
 
 export const metadata: Metadata = { title: "Kelola Pengguna" };
 
-type SearchParams = { q?: string; status?: string; role?: string };
+type SearchParams = { q?: string; status?: string; role?: string; dihapus?: string };
 
 const STATUS_FILTERS: Record<string, AccountStatus[]> = {
   pending: ["pending"],
@@ -32,7 +33,7 @@ export default async function AdminUsersPage({
   searchParams: Promise<SearchParams>;
 }) {
   const admin = await requireAdmin();
-  const { q = "", status = "all", role = "all" } = await searchParams;
+  const { q = "", status = "all", role = "all", dihapus } = await searchParams;
   const supabase = await createClient();
 
   let query = supabase.from("profiles").select("*").order("created_at", { ascending: false });
@@ -63,6 +64,8 @@ export default async function AdminUsersPage({
   return (
     <>
       <LiveSync tables={["profiles"]} />
+
+      {dihapus ? <DeletedDialog message={dihapus} /> : null}
 
       <PageHeader
         title="Kelola Pengguna"
