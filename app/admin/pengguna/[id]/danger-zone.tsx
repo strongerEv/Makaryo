@@ -17,11 +17,27 @@ import type { Profile } from "@/lib/types/database";
 
 const INITIAL: ActionState = {};
 
-export function DangerZone({ user, isSelf }: { user: Profile; isSelf: boolean }) {
+export type RiwayatPengguna = {
+  attendances: number;
+  schedule_assignments: number;
+  revenue_reports: number;
+  total: number;
+};
+
+export function DangerZone({
+  user,
+  isSelf,
+  riwayat,
+}: {
+  user: Profile;
+  isSelf: boolean;
+  riwayat: RiwayatPengguna;
+}) {
   const [statusState, changeStatus] = useActionState(setAccountStatusAction, INITIAL);
   const [deleteState, deleteUser] = useActionState(deleteUserAction, INITIAL);
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [setuju, setSetuju] = useState(false);
 
   if (isSelf) {
     return (
@@ -40,7 +56,7 @@ export function DangerZone({ user, isSelf }: { user: Profile; isSelf: boolean })
     <Card className="border-coral/30">
       <CardHeader
         title="Zona berbahaya"
-        description="Nonaktifkan bila hanya ingin mencabut akses. Hapus permanen tidak bisa dibatalkan."
+        description="Nonaktifkan bila hanya ingin mencabut akses. Hapus permanen membuang akun beserta riwayatnya."
       />
 
       {statusState.error ? <Alert tone="error" className="mb-3">{statusState.error}</Alert> : null}
@@ -104,9 +120,44 @@ export function DangerZone({ user, isSelf }: { user: Profile; isSelf: boolean })
       >
         <form action={deleteUser} className="space-y-4">
           <input type="hidden" name="userId" value={user.id} />
-          <Alert tone="warning">
-            Akun yang sudah punya riwayat absensi, jadwal, atau omzet tidak bisa dihapus — nonaktifkan saja.
-          </Alert>
+
+          {riwayat.total > 0 ? (
+            <>
+              <Alert tone="warning">
+                <span className="font-semibold">Riwayat ini ikut terhapus permanen:</span>
+                <ul className="mt-1.5 list-inside list-disc space-y-0.5">
+                  {riwayat.attendances > 0 ? (
+                    <li>{riwayat.attendances} catatan absensi, beserta foto selfienya</li>
+                  ) : null}
+                  {riwayat.schedule_assignments > 0 ? (
+                    <li>{riwayat.schedule_assignments} penugasan jadwal</li>
+                  ) : null}
+                  {riwayat.revenue_reports > 0 ? (
+                    <li>{riwayat.revenue_reports} laporan omzet, beserta buktinya</li>
+                  ) : null}
+                </ul>
+                <p className="mt-1.5">
+                  Kalau riwayatnya masih dibutuhkan untuk laporan, nonaktifkan akunnya saja.
+                </p>
+              </Alert>
+
+              <label className="flex cursor-pointer gap-2.5 rounded-[var(--radius-md)] border border-coral/40 bg-coral-soft p-3.5">
+                <input
+                  type="checkbox"
+                  name="hapusRiwayat"
+                  value="ya"
+                  checked={setuju}
+                  onChange={(event) => setSetuju(event.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--color-coral)]"
+                />
+                <span className="text-[13px] leading-snug font-semibold text-[#c73f35]">
+                  Saya paham seluruh riwayat di atas akan hilang selamanya.
+                </span>
+              </label>
+            </>
+          ) : (
+            <Alert tone="info">Pengguna ini belum punya riwayat apa pun, jadi tidak ada data yang ikut hilang.</Alert>
+          )}
           <Field
             label={`Ketik "${user.full_name}" untuk konfirmasi`}
             htmlFor="delete-confirmation"
@@ -118,7 +169,11 @@ export function DangerZone({ user, isSelf }: { user: Profile; isSelf: boolean })
             <button type="button" onClick={() => setDeleteOpen(false)} className={buttonClass({ variant: "ghost" })}>
               Batal
             </button>
-            <SubmitButton variant="danger" pendingLabel="Menghapus…">
+            <SubmitButton
+              variant="danger"
+              disabled={riwayat.total > 0 && !setuju}
+              pendingLabel="Menghapus…"
+            >
               Hapus permanen
             </SubmitButton>
           </div>

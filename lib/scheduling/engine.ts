@@ -92,10 +92,20 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
   const weeklyDays: Record<string, Set<string>> = {};
   const intervals: Record<string, Interval[]> = {};
 
+  // Berapa kali tiap host sudah kebagian tiap shift, dan kapan terakhir kali.
+  // Tanpa dua catatan ini, pengurutan kandidat berakhir di perbandingan id,
+  // sehingga orang yang sama selalu memenangkan shift pertama setiap hari —
+  // pagi terus pagi, siang terus siang.
+  const shiftCounts: Record<string, Record<string, number>> = {};
+  const lastShiftDay: Record<string, Record<string, number>> = {};
+  const dayIndex = new Map(dates.map((date, index) => [date, index]));
+
   hosts.forEach((host) => {
     totalLoad[host.id] = input.previousWorkload?.[host.id] ?? 0;
     weeklyDays[host.id] = new Set();
     intervals[host.id] = [];
+    shiftCounts[host.id] = {};
+    lastShiftDay[host.id] = {};
   });
 
   const result: SchedulingAssignment[] = [];
@@ -112,6 +122,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
     totalLoad[assignment.hostId] += 1;
     weeklyDays[assignment.hostId].add(`${weekStart(assignment.workDate)}|${assignment.workDate}`);
     intervals[assignment.hostId].push(toInterval(assignment.workDate, shift));
+    catatRotasi(shiftCounts, lastShiftDay, assignment.hostId, assignment.shiftId, dayIndex.get(assignment.workDate) ?? -1);
 
     const key = `${assignment.workDate}|${assignment.shiftId}`;
     takenSlots.set(key, (takenSlots.get(key) ?? 0) + 1);
@@ -136,7 +147,18 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
         .filter((host) =>
           isEligible(host, { workDate, week, shift, leaveKeys, restKeys: restPlan.keys, weeklyDays, intervals }),
         )
-        .sort((a, b) => compareCandidates(a, b, { workDate, shift, totalLoad, weeklyDays, week, intervals }));
+        .sort((a, b) =>
+          compareCandidates(a, b, {
+            workDate,
+            shift,
+            totalLoad,
+            weeklyDays,
+            week,
+            intervals,
+            shiftCounts,
+            lastShiftDay,
+          }),
+        );
 
       const picked = candidates.slice(0, needed);
 
@@ -145,6 +167,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
         totalLoad[host.id] += 1;
         weeklyDays[host.id].add(`${week}|${workDate}`);
         intervals[host.id].push(toInterval(workDate, shift));
+        catatRotasi(shiftCounts, lastShiftDay, host.id, shift.id, dayIndex.get(workDate) ?? -1);
       });
 
       const assigned = alreadyTaken + picked.length;
@@ -155,6 +178,21 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
   }
 
   return { assignments: result, warnings };
+}
+
+/** Mencatat bahwa satu host memegang satu shift pada hari ke-`dayIndex`. */
+function catatRotasi(
+  shiftCounts: Record<string, Record<string, number>>,
+  lastShiftDay: Record<string, Record<string, number>>,
+  hostId: string,
+  shiftId: string,
+  dayIndex: number,
+) {
+  if (!shiftCounts[hostId]) shiftCounts[hostId] = {};
+  if (!lastShiftDay[hostId]) lastShiftDay[hostId] = {};
+
+  shiftCounts[hostId][shiftId] = (shiftCounts[hostId][shiftId] ?? 0) + 1;
+  lastShiftDay[hostId][shiftId] = Math.max(lastShiftDay[hostId][shiftId] ?? -1, dayIndex);
 }
 
 function buildWarning(workDate: string, shift: SchedulingShift, assigned: number): SchedulingWarning {
@@ -216,12 +254,27 @@ function compareCandidates(
     weeklyDays: Record<string, Set<string>>;
     week: string;
     intervals: Record<string, Interval[]>;
+    shiftCounts: Record<string, Record<string, number>>;
+    lastShiftDay: Record<string, Record<string, number>>;
   },
 ) {
-  const { totalLoad, weeklyDays, week, workDate, shift, intervals } = context;
+  const { totalLoad, weeklyDays, week, workDate, shift, intervals, shiftCounts, lastShiftDay } = context;
 
   const loadDiff = totalLoad[a.id] - totalLoad[b.id];
   if (loadDiff !== 0) return loadDiff;
+
+  // Rotasi shift. Beban total biasanya seri, dan dulu penentunya langsung jatuh
+  // ke perbandingan id — membuat orang yang sama terus-menerus kebagian shift
+  // yang sama. Yang paling jarang memegang shift ini didahulukan.
+  const rotasiDiff =
+    (shiftCounts[a.id]?.[shift.id] ?? 0) - (shiftCounts[b.id]?.[shift.id] ?? 0);
+  if (rotasiDiff !== 0) return rotasiDiff;
+
+  // Bila sama-sama jarang, yang paling lama tidak memegangnya yang maju.
+  // -1 berarti belum pernah, jadi otomatis paling depan.
+  const terakhirDiff =
+    (lastShiftDay[a.id]?.[shift.id] ?? -1) - (lastShiftDay[b.id]?.[shift.id] ?? -1);
+  if (terakhirDiff !== 0) return terakhirDiff;
 
   const weekDiff = countDaysInWeek(weeklyDays[a.id], week) - countDaysInWeek(weeklyDays[b.id], week);
   if (weekDiff !== 0) return weekDiff;

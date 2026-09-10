@@ -34,11 +34,25 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
   if (!data) notFound();
 
   const user = data as Profile;
-  const [avatarUrl, stats, revenueTotal] = await Promise.all([
+  const [avatarUrl, stats, revenueTotal, absensiCount, jadwalCount, omzetCount] = await Promise.all([
     signAvatarUrl(supabase, user.avatar_url),
     getMonthlyAttendanceStats(supabase, user.id),
     getMonthlyRevenueTotal(supabase, user.id),
+    supabase.from("attendances").select("id", { count: "exact", head: true }).eq("host_id", user.id),
+    supabase
+      .from("schedule_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("host_id", user.id),
+    supabase.from("revenue_reports").select("id", { count: "exact", head: true }).eq("host_id", user.id),
   ]);
+
+  // Dipakai zona berbahaya untuk menyebutkan persis apa yang ikut terhapus.
+  const riwayat = {
+    attendances: absensiCount.count ?? 0,
+    schedule_assignments: jadwalCount.count ?? 0,
+    revenue_reports: omzetCount.count ?? 0,
+    total: (absensiCount.count ?? 0) + (jadwalCount.count ?? 0) + (omzetCount.count ?? 0),
+  };
   const isSelf = user.id === admin.id;
 
   return (
@@ -127,7 +141,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
             />
           ) : null}
 
-          <DangerZone user={user} isSelf={isSelf} />
+          <DangerZone user={user} isSelf={isSelf} riwayat={riwayat} />
         </div>
       </div>
     </>

@@ -322,9 +322,43 @@ export async function updateUserAction(_prev: ActionState, formData: FormData): 
  * Menghitung riwayat operasional milik pengguna.
  * Tabel yang belum dibuat di sesi berikutnya diabaikan, bukan dianggap error.
  */
-async function countHistory(client: ReturnType<typeof createAdminClient>, userId: string) {
+/** Menyusun kalimat rincian riwayat, misal "12 absensi dan 4 laporan omzet". */
+function rincianRiwayat(history: HistoryCounts) {
+  const bagian = [
+    history.attendances > 0 ? `${history.attendances} catatan absensi` : null,
+    history.schedule_assignments > 0 ? `${history.schedule_assignments} penugasan jadwal` : null,
+    history.revenue_reports > 0 ? `${history.revenue_reports} laporan omzet` : null,
+  ].filter(Boolean) as string[];
+
+  if (bagian.length === 0) return "tanpa riwayat";
+  if (bagian.length === 1) return bagian[0];
+  return `${bagian.slice(0, -1).join(", ")} dan ${bagian[bagian.length - 1]}`;
+}
+
+export type HistoryCounts = {
+  attendances: number;
+  revenue_reports: number;
+  schedule_assignments: number;
+  total: number;
+};
+
+/**
+ * Jumlah riwayat milik satu pengguna, dirinci per jenis.
+ *
+ * Dipakai untuk memberi tahu admin persis apa yang akan ikut terhapus, bukan
+ * sekadar menolak penghapusannya.
+ */
+async function countHistory(
+  client: ReturnType<typeof createAdminClient>,
+  userId: string,
+): Promise<HistoryCounts | null> {
   const tables = ["attendances", "revenue_reports", "schedule_assignments"] as const;
-  let total = 0;
+  const hasil: HistoryCounts = {
+    attendances: 0,
+    revenue_reports: 0,
+    schedule_assignments: 0,
+    total: 0,
+  };
 
   for (const table of tables) {
     const { count, error } = await client
@@ -334,10 +368,11 @@ async function countHistory(client: ReturnType<typeof createAdminClient>, userId
 
     // 42P01 = tabel belum ada (modulnya belum dibangun).
     if (error && error.code !== "42P01" && error.code !== "PGRST205") return null;
-    total += count ?? 0;
+    hasil[table] = count ?? 0;
+    hasil.total += count ?? 0;
   }
 
-  return total;
+  return hasil;
 }
 
 export async function deleteUserAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -360,14 +395,22 @@ export async function deleteUserAction(_prev: ActionState, formData: FormData): 
 
   const history = await countHistory(client, userId);
   if (history === null) return fail("Gagal memeriksa riwayat pengguna. Coba lagi.");
-  if (history > 0) {
-    return fail(
-      "Pengguna ini sudah punya riwayat absensi, jadwal, atau omzet. Nonaktifkan akunnya saja agar riwayat tetap utuh.",
-    );
+
+  // Anggota yang keluar atau pindah tim memang harus bisa dihapus. Riwayatnya
+  // ikut terhapus lewat cascade, jadi admin wajib menyetujuinya secara terpisah
+  // supaya tidak terjadi karena salah tekan.
+  if (history.total > 0) {
+    const sadar = String(formData.get("hapusRiwayat") ?? "") === "ya";
+    if (!sadar) {
+      return fail(
+        `${before.full_name} punya ${rincianRiwayat(history)}. Centang persetujuan penghapusan riwayat, ` +
+          "atau nonaktifkan akunnya saja bila riwayatnya masih dibutuhkan.",
+      );
+    }
   }
 
   const { error } = await client.auth.admin.deleteUser(userId);
-  if (error) return fail("Gagal menghapus akun. Coba lagi.");
+  if (error) return fail(`Gagal menghapus akun: ${error.message}`);
 
   await logAudit({
     actorId: admin.id,
@@ -375,11 +418,17 @@ export async function deleteUserAction(_prev: ActionState, formData: FormData): 
     action: "delete",
     entityId: userId,
     targetUserId: null,
-    before: auditSnapshot(before),
+    before: { ...auditSnapshot(before), riwayat_terhapus: history },
   });
 
   revalidateUserPages();
-  return { success: `Akun ${before.full_name} dihapus permanen.` };
+
+  return {
+    success:
+      history.total > 0
+        ? `Akun ${before.full_name} dihapus permanen beserta ${rincianRiwayat(history)}.`
+        : `Akun ${before.full_name} dihapus permanen.`,
+  };
 }
 
 
