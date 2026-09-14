@@ -186,7 +186,14 @@ export default async function AdminSchedulePage({
       <PageHeader
         title="Jadwal"
         description="Susun jadwal seluruh host, lalu publish agar terlihat oleh mereka."
-        action={<ScheduleToolbar month={month} draftCount={draftCount} monthCounts={monthCounts} />}
+        action={
+          <ScheduleToolbar
+            month={month}
+            today={today}
+            draftCount={draftCount}
+            monthCounts={monthCounts}
+          />
+        }
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

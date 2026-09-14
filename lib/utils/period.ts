@@ -109,6 +109,43 @@ export function weekStart(date: string) {
   return toIsoDate(cursor);
 }
 
+/** Selisih hari antara dua tanggal YYYY-MM-DD; negatif bila `date` mendahului `from`. */
+export function daysBetween(from: string, date: string) {
+  const awal = Date.parse(`${from}T00:00:00Z`);
+  const akhir = Date.parse(`${date}T00:00:00Z`);
+  return Math.round((akhir - awal) / 86_400_000);
+}
+
+export type MonthWeek = {
+  /** Nomor minggu di dalam bulan, mulai dari 1. */
+  index: number;
+  start: string;
+  end: string;
+};
+
+/**
+ * Membagi satu bulan menjadi minggu-minggu Senin–Minggu, dipotong di tepi bulan.
+ *
+ * Potongan di tepi memang disengaja: penomorannya harus cocok dengan baris yang
+ * dilihat admin di kalender, dan generate per bulan tidak boleh diam-diam
+ * merembet ke bulan sebelah. Jadi minggu pertama dan terakhir bisa lebih pendek
+ * dari tujuh hari.
+ */
+export function monthWeeks(month: string): MonthWeek[] {
+  const { start, end } = monthRange(month);
+  const weeks: MonthWeek[] = [];
+
+  let cursor = start;
+  while (cursor <= end) {
+    const akhirMinggu = addDays(weekStart(cursor), 6);
+    const akhir = akhirMinggu > end ? end : akhirMinggu;
+    weeks.push({ index: weeks.length + 1, start: cursor, end: akhir });
+    cursor = addDays(akhir, 1);
+  }
+
+  return weeks;
+}
+
 export function addDays(date: string, days: number) {
   const cursor = new Date(`${date}T00:00:00Z`);
   cursor.setUTCDate(cursor.getUTCDate() + days);

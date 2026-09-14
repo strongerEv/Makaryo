@@ -1,12 +1,13 @@
 "use client";
 
-import { Pencil, Receipt } from "lucide-react";
+import { Pencil, Receipt, Trash2 } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
 
-import { updateRevenueAction, type ActionState } from "@/app/(host)/omzet/actions";
+import { deleteRevenueAction, updateRevenueAction, type ActionState } from "@/app/(host)/omzet/actions";
 import { Alert } from "@/components/ui/alert";
 import { buttonClass } from "@/components/ui/button";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
+import { ConfirmField } from "@/components/ui/confirm-field";
 import { Modal } from "@/components/ui/modal";
 import { SubmitButton } from "@/components/ui/submit-button";
 import type { RevenueReport, Shift } from "@/lib/types/database";
@@ -25,26 +26,40 @@ export function RevenueList({
   proofs,
   shifts,
   canEdit,
+  canDelete,
   showHost,
 }: {
   reports: RevenueRow[];
   proofs: Record<string, string>;
   shifts: Shift[];
   canEdit?: boolean;
+  /** Hanya admin. Host boleh merevisi laporannya, tetapi tidak menghapusnya. */
+  canDelete?: boolean;
   showHost?: boolean;
 }) {
   const [editing, setEditing] = useState<RevenueRow | null>(null);
+  const [deleting, setDeleting] = useState<RevenueRow | null>(null);
   const [state, update] = useActionState(updateRevenueAction, INITIAL);
+  const [deleteState, remove] = useActionState(deleteRevenueAction, INITIAL);
 
   useEffect(() => {
     if (state.success) setEditing(null);
   }, [state.success]);
+
+  useEffect(() => {
+    if (deleteState.success) setDeleting(null);
+  }, [deleteState.success]);
 
   return (
     <>
       {state.success ? (
         <Alert tone="success" className="mx-5 mb-3">
           {state.success}
+        </Alert>
+      ) : null}
+      {deleteState.success ? (
+        <Alert tone="success" className="mx-5 mb-3">
+          {deleteState.success}
         </Alert>
       ) : null}
 
@@ -84,6 +99,17 @@ export function RevenueList({
               >
                 <Pencil className="size-4" aria-hidden />
                 <span className="sr-only">Ubah laporan</span>
+              </button>
+            ) : null}
+
+            {canDelete ? (
+              <button
+                type="button"
+                onClick={() => setDeleting(report)}
+                className={`${buttonClass({ variant: "ghost", size: "sm" })} text-coral hover:bg-coral-soft`}
+              >
+                <Trash2 className="size-4" aria-hidden />
+                <span className="sr-only">Hapus laporan</span>
               </button>
             ) : null}
           </li>
@@ -144,6 +170,42 @@ export function RevenueList({
                 Batal
               </button>
               <SubmitButton pendingLabel="Menyimpan…">Simpan revisi</SubmitButton>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+    
+      <Modal
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        title="Hapus laporan omzet"
+        description="Laporan dan foto buktinya hilang permanen. Tidak bisa dibatalkan."
+        className="sm:max-w-[440px]"
+      >
+        {deleting ? (
+          <form action={remove} className="space-y-4">
+            {deleteState.error ? <Alert tone="error">{deleteState.error}</Alert> : null}
+            <input type="hidden" name="reportId" value={deleting.id} />
+
+            <div className="rounded-[var(--radius-md)] bg-surface-muted p-3.5">
+              <p className="tabular text-sm font-bold text-ink">{formatCurrency(deleting.amount)}</p>
+              <p className="mt-0.5 text-[12px] text-ink-muted">
+                {deleting.profiles?.full_name ? `${deleting.profiles.full_name} · ` : ""}
+                {formatDate(deleting.work_date)}
+                {deleting.shifts?.name ? ` · ${deleting.shifts.name}` : ""}
+              </p>
+            </div>
+
+            <ConfirmField id={`hapus-omzet-${deleting.id}`} />
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setDeleting(null)} className={buttonClass({ variant: "ghost" })}>
+                Batal
+              </button>
+              <SubmitButton variant="danger" pendingLabel="Menghapus…">
+                <Trash2 className="size-4" aria-hidden />
+                Hapus laporan
+              </SubmitButton>
             </div>
           </form>
         ) : null}

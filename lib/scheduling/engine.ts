@@ -1,6 +1,6 @@
 import { shiftEndInstant, shiftStartInstant } from "@/lib/attendance/time";
 import { planRestDays } from "@/lib/scheduling/rest-days";
-import { eachDate, weekStart } from "@/lib/utils/period";
+import { daysBetween, eachDate, weekStart } from "@/lib/utils/period";
 
 export type SchedulingHost = {
   id: string;
@@ -57,6 +57,15 @@ export type SchedulingResult = {
 /** Jeda istirahat minimum yang diusahakan antar shift berurutan (batasan lunak). */
 const PREFERRED_REST_HOURS = 10;
 
+/**
+ * Penanda "belum pernah memegang shift ini".
+ *
+ * Bukan -1: penugasan dari luar rentang generate punya indeks hari negatif —
+ * minggu lalu adalah hari ke-7 — sehingga -1 akan tertukar dengan riwayat nyata
+ * dan membuat orang yang baru saja memegang shift itu dikira belum pernah.
+ */
+const BELUM_PERNAH = Number.NEGATIVE_INFINITY;
+
 type Interval = { start: number; end: number };
 
 /**
@@ -98,7 +107,12 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
   // pagi terus pagi, siang terus siang.
   const shiftCounts: Record<string, Record<string, number>> = {};
   const lastShiftDay: Record<string, Record<string, number>> = {};
-  const dayIndex = new Map(dates.map((date, index) => [date, index]));
+
+  // Dihitung, bukan dicari di daftar tanggal: penugasan pembanding boleh berada
+  // di luar rentang generate — minggu sebelumnya saat hanya satu minggu yang
+  // disusun ulang — dan hari-hari itu harus dapat indeks negatif, bukan dianggap
+  // tidak ada.
+  const indeksHari = (date: string) => daysBetween(input.startDate, date);
 
   hosts.forEach((host) => {
     totalLoad[host.id] = input.previousWorkload?.[host.id] ?? 0;
@@ -122,7 +136,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
     totalLoad[assignment.hostId] += 1;
     weeklyDays[assignment.hostId].add(`${weekStart(assignment.workDate)}|${assignment.workDate}`);
     intervals[assignment.hostId].push(toInterval(assignment.workDate, shift));
-    catatRotasi(shiftCounts, lastShiftDay, assignment.hostId, assignment.shiftId, dayIndex.get(assignment.workDate) ?? -1);
+    catatRotasi(shiftCounts, lastShiftDay, assignment.hostId, assignment.shiftId, indeksHari(assignment.workDate));
 
     const key = `${assignment.workDate}|${assignment.shiftId}`;
     takenSlots.set(key, (takenSlots.get(key) ?? 0) + 1);
@@ -167,7 +181,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
         totalLoad[host.id] += 1;
         weeklyDays[host.id].add(`${week}|${workDate}`);
         intervals[host.id].push(toInterval(workDate, shift));
-        catatRotasi(shiftCounts, lastShiftDay, host.id, shift.id, dayIndex.get(workDate) ?? -1);
+        catatRotasi(shiftCounts, lastShiftDay, host.id, shift.id, indeksHari(workDate));
       });
 
       const assigned = alreadyTaken + picked.length;
@@ -192,7 +206,7 @@ function catatRotasi(
   if (!lastShiftDay[hostId]) lastShiftDay[hostId] = {};
 
   shiftCounts[hostId][shiftId] = (shiftCounts[hostId][shiftId] ?? 0) + 1;
-  lastShiftDay[hostId][shiftId] = Math.max(lastShiftDay[hostId][shiftId] ?? -1, dayIndex);
+  lastShiftDay[hostId][shiftId] = Math.max(lastShiftDay[hostId][shiftId] ?? BELUM_PERNAH, dayIndex);
 }
 
 function buildWarning(workDate: string, shift: SchedulingShift, assigned: number): SchedulingWarning {
@@ -271,9 +285,10 @@ function compareCandidates(
   if (rotasiDiff !== 0) return rotasiDiff;
 
   // Bila sama-sama jarang, yang paling lama tidak memegangnya yang maju.
-  // -1 berarti belum pernah, jadi otomatis paling depan.
-  const terakhirDiff =
-    (lastShiftDay[a.id]?.[shift.id] ?? -1) - (lastShiftDay[b.id]?.[shift.id] ?? -1);
+  const terakhirDiff = bandingkanTerakhir(
+    lastShiftDay[a.id]?.[shift.id],
+    lastShiftDay[b.id]?.[shift.id],
+  );
   if (terakhirDiff !== 0) return terakhirDiff;
 
   const weekDiff = countDaysInWeek(weeklyDays[a.id], week) - countDaysInWeek(weeklyDays[b.id], week);
@@ -283,6 +298,23 @@ function compareCandidates(
   if (restDiff !== 0) return restDiff;
 
   return a.id.localeCompare(b.id);
+}
+
+/**
+ * Mengurutkan dua host berdasarkan kapan terakhir memegang satu shift.
+ *
+ * Pengurangan langsung tidak dipakai karena BELUM_PERNAH bernilai -Infinity:
+ * mengurangkannya dari dirinya sendiri menghasilkan NaN, dan pembanding yang
+ * mengembalikan NaN membuat urutannya tidak menentu.
+ */
+function bandingkanTerakhir(a: number | undefined, b: number | undefined) {
+  const kiri = a ?? BELUM_PERNAH;
+  const kanan = b ?? BELUM_PERNAH;
+
+  if (kiri === kanan) return 0;
+  if (kiri === BELUM_PERNAH) return -1;
+  if (kanan === BELUM_PERNAH) return 1;
+  return kiri - kanan;
 }
 
 /** 1 bila host baru saja menutup shift kurang dari jeda istirahat yang dianjurkan. */

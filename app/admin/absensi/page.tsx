@@ -15,8 +15,10 @@ import { signPhotoUrls } from "@/lib/storage/photos";
 import { createClient } from "@/lib/supabase/server";
 import type { Attendance, Profile, Shift } from "@/lib/types/database";
 import { formatDate, todayInJakarta } from "@/lib/utils/datetime";
+import { currentMonth, monthRange, shiftMonth } from "@/lib/utils/period";
 import { AttendanceRows, type AdminAttendanceRow } from "./attendance-rows";
 import { ManualAttendanceDialog } from "./manual-attendance-dialog";
+import { ResetAttendanceDialog } from "./reset-attendance-dialog";
 
 export const metadata: Metadata = { title: "Absensi" };
 
@@ -45,7 +47,12 @@ export default async function AdminAttendancePage({
 
   if (host !== "all") query = query.eq("host_id", host);
 
-  const [{ data: attendanceRows }, { data: hostRows }, { count: scheduledCount }] = await Promise.all([
+  const [
+    { data: attendanceRows },
+    { data: hostRows },
+    { count: scheduledCount },
+    { data: monthCountRows },
+  ] = await Promise.all([
     query,
     supabase
       .from("profiles")
@@ -58,10 +65,27 @@ export default async function AdminAttendancePage({
       .select("id", { count: "exact", head: true })
       .eq("work_date", tanggal)
       .eq("status", "published"),
+    // Ringkasan per bulan untuk dialog reset — hanya angkanya, bukan barisnya.
+    supabase.rpc("attendance_month_counts", {
+      from_month: monthRange(shiftMonth(currentMonth(), -12)).start,
+      to_month: monthRange(shiftMonth(currentMonth(), 1)).start,
+    }),
   ]);
 
   const rows = (attendanceRows ?? []) as Row[];
   const hosts = (hostRows ?? []) as Profile[];
+
+  // Tanggal di alamat bisa berisi apa saja. Dialog reset harus menerima bulan
+  // yang pasti ada di daftar pilihannya, kalau tidak select-nya diam-diam jatuh
+  // ke bulan lain sementara state-nya memegang nilai yang tidak dikenal.
+  const bulanReset = /^\d{4}-\d{2}-\d{2}$/.test(tanggal) ? tanggal.slice(0, 7) : currentMonth();
+
+  const monthCounts: Record<string, number> = Object.fromEntries(
+    ((monthCountRows ?? []) as { month: string; record_count: number }[]).map((row) => [
+      row.month,
+      row.record_count,
+    ]),
+  );
 
   const photos = await signPhotoUrls(
     supabase,
@@ -100,7 +124,16 @@ export default async function AdminAttendancePage({
       <PageHeader
         title="Absensi"
         description={`Monitor kehadiran ${formatDate(tanggal)}. Ketuk satu baris untuk melihat foto dan lokasinya.`}
-        action={<ManualAttendanceDialog hosts={hosts} defaultDate={tanggal} />}
+        action={
+          <div className="flex flex-wrap gap-2">
+            <ManualAttendanceDialog hosts={hosts} defaultDate={tanggal} />
+            <ResetAttendanceDialog
+              defaultMonth={bulanReset}
+              counts={monthCounts}
+              hosts={hosts.map((item) => ({ id: item.id, name: item.full_name }))}
+            />
+          </div>
+        }
       />
 
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

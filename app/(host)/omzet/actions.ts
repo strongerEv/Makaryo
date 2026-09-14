@@ -5,9 +5,11 @@ import { z } from "zod";
 
 import { logAudit } from "@/lib/auth/audit";
 import { requireActiveProfile } from "@/lib/auth/session";
-import { uploadPhoto } from "@/lib/storage/photos";
+import { removePhotos, uploadPhoto } from "@/lib/storage/photos";
 import { createClient } from "@/lib/supabase/server";
 import { isAdminRole } from "@/lib/types/database";
+import { konfirmasiCocok, PESAN_KONFIRMASI } from "@/lib/utils/confirm";
+import { formatCurrency } from "@/lib/utils/format";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -138,3 +140,55 @@ export async function updateRevenueAction(_prev: ActionState, formData: FormData
   revalidateRevenue();
   return { success: "Revisi laporan tersimpan." };
 }
+
+/**
+ * Menghapus satu laporan omzet berikut foto buktinya.
+ *
+ * Khusus admin. Host tetap boleh merevisi laporannya sendiri, tetapi tidak
+ * menghapusnya — angka yang sudah dilaporkan adalah dasar rekap, dan revisi
+ * meninggalkan jejak di audit log sedangkan penghapusan tidak.
+ */
+export async function deleteRevenueAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const profile = await requireActiveProfile();
+  if (!isAdminRole(profile.role)) {
+    return { error: "Hanya admin yang bisa menghapus laporan omzet." };
+  }
+
+  if (!konfirmasiCocok(formData.get("confirmation"))) return { error: PESAN_KONFIRMASI };
+
+  const reportId = String(formData.get("reportId") ?? "");
+  if (!reportId) return { error: "Laporan tidak ditemukan." };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("revenue_reports")
+    .select("*, profiles!revenue_reports_host_id_fkey(full_name)")
+    .eq("id", reportId)
+    .single();
+
+  if (!before) return { error: "Laporan tidak ditemukan — mungkin sudah dihapus." };
+
+  const { error } = await supabase.from("revenue_reports").delete().eq("id", reportId);
+  if (error) return { error: `Gagal menghapus laporan: ${error.message}` };
+
+  // Berkas dibereskan setelah barisnya hilang. Kalau urutannya dibalik lalu
+  // penghapusan baris gagal, yang tersisa adalah laporan tanpa bukti.
+  await removePhotos(supabase, "revenue", [before.proof_url]);
+
+  await logAudit({
+    actorId: profile.id,
+    entity: "revenue",
+    action: "delete",
+    entityId: reportId,
+    targetUserId: before.host_id,
+    before: { work_date: before.work_date, amount: before.amount, shift_id: before.shift_id },
+  });
+
+  revalidateRevenue();
+
+  const nama = (before.profiles as unknown as { full_name: string } | null)?.full_name;
+  return {
+    success: `Laporan ${formatCurrency(Number(before.amount))}${nama ? ` milik ${nama}` : ""} dihapus.`,
+  };
+}
+

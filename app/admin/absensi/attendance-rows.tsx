@@ -4,6 +4,7 @@ import { CalendarX2, ChevronRight, MapPinOff } from "lucide-react";
 import { useState } from "react";
 
 import { AttendanceCorrectionDialog } from "@/app/admin/absensi/attendance-correction-dialog";
+import { AttendanceDeleteDialog } from "@/app/admin/absensi/attendance-delete-dialog";
 import { AttendanceDetailSheet, type AttendanceDetail } from "@/components/attendance/attendance-detail-sheet";
 import { AttendanceStatusBadge } from "@/components/ui/attendance-badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -70,6 +71,7 @@ export function AttendanceRows({ rows }: { rows: AdminAttendanceRow[] }) {
             </button>
 
             <AttendanceCorrectionDialog attendance={attendance} hostName={detail.hostName} />
+            <AttendanceDeleteDialog attendance={attendance} hostName={detail.hostName} />
           </li>
         ))}
       </ul>

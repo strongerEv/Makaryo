@@ -83,3 +83,46 @@ describe("rotasi shift", () => {
     expect(Math.max(...beban) - Math.min(...beban)).toBeLessThanOrEqual(1);
   });
 });
+
+describe("generate sebagian rentang", () => {
+  // Minggu 2–8 Maret 2026 dianggap sudah tersusun: "a" memegang pagi setiap
+  // hari. Yang disusun ulang hanya minggu berikutnya.
+  const mingguLalu = ["02", "03", "04", "05", "06", "07", "08"].map((hari) => ({
+    hostId: "a",
+    shiftId: "s-pagi",
+    workDate: `2026-03-${hari}`,
+  }));
+
+  it("memperhitungkan shift dari minggu sebelumnya saat memilih host", () => {
+    const { assignments } = generateSchedule({
+      startDate: "2026-03-09",
+      endDate: "2026-03-15",
+      hosts,
+      shifts,
+      existingAssignments: mingguLalu,
+    });
+
+    const pagiHariPertama = assignments.find(
+      (row) => row.workDate === "2026-03-09" && row.shiftId === "s-pagi",
+    );
+
+    // Tanpa riwayat minggu lalu, "a" menang lagi lewat urutan id dan terkunci
+    // di shift pagi untuk minggu kedua berturut-turut.
+    expect(pagiHariPertama?.hostId).not.toBe("a");
+  });
+
+  it("tidak menyentuh tanggal di luar rentang yang diminta", () => {
+    const { assignments } = generateSchedule({
+      startDate: "2026-03-09",
+      endDate: "2026-03-15",
+      hosts,
+      shifts,
+      existingAssignments: mingguLalu,
+    });
+
+    const diLuar = assignments.filter(
+      (row) => row.workDate < "2026-03-09" || row.workDate > "2026-03-15",
+    );
+    expect(diLuar).toEqual([]);
+  });
+});

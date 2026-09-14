@@ -6,7 +6,11 @@ import { z } from "zod";
 import { evaluateClockIn, workedMinutesBetween } from "@/lib/attendance/status";
 import { logAudit } from "@/lib/auth/audit";
 import { requireAdmin } from "@/lib/auth/session";
+import { removePhotos } from "@/lib/storage/photos";
 import { createClient } from "@/lib/supabase/server";
+import { konfirmasiCocok, PESAN_KONFIRMASI } from "@/lib/utils/confirm";
+import { formatDate } from "@/lib/utils/datetime";
+import { monthLabel, monthRange } from "@/lib/utils/period";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -208,4 +212,115 @@ export async function correctAttendanceAction(_prev: ActionState, formData: Form
 
   revalidateAttendance();
   return { success: "Koreksi absensi tersimpan." };
+}
+
+/**
+ * Menghapus satu catatan absensi berikut foto clock in dan clock out-nya.
+ *
+ * Koreksi sudah menutup kebutuhan "jamnya salah". Yang belum ada adalah
+ * membuang baris yang memang tidak seharusnya ada — hasil uji coba, atau absen
+ * yang tercatat atas nama orang yang keliru — dan itu tidak bisa diperbaiki
+ * dengan mengubah jam.
+ */
+export async function deleteAttendanceAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  if (!konfirmasiCocok(formData.get("confirmation"))) return { error: PESAN_KONFIRMASI };
+
+  const attendanceId = String(formData.get("attendanceId") ?? "");
+  if (!attendanceId) return { error: "Data absensi tidak dikenal." };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("attendances")
+    .select("*, profiles!attendances_host_id_fkey(full_name)")
+    .eq("id", attendanceId)
+    .single();
+
+  if (!before) return { error: "Data absensi tidak ditemukan — mungkin sudah dihapus." };
+
+  const { error } = await supabase.from("attendances").delete().eq("id", attendanceId);
+  if (error) return { error: `Gagal menghapus absensi: ${error.message}` };
+
+  // Fotonya dibereskan setelah barisnya hilang; kalau urutannya dibalik dan
+  // penghapusan baris gagal, yang tersisa adalah absensi tanpa bukti foto.
+  await removePhotos(supabase, "attendance", [before.clock_in_photo, before.clock_out_photo]);
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "attendance",
+    action: "delete",
+    entityId: attendanceId,
+    targetUserId: before.host_id,
+    before: {
+      work_date: before.work_date,
+      clock_in_at: before.clock_in_at,
+      clock_out_at: before.clock_out_at,
+      status: before.status,
+    },
+  });
+
+  revalidateAttendance();
+
+  const nama = (before.profiles as unknown as { full_name: string } | null)?.full_name ?? "Host";
+  return { success: `Absensi ${nama} pada ${formatDate(before.work_date)} dihapus.` };
+}
+
+/**
+ * Menghapus seluruh catatan absensi dalam satu bulan.
+ *
+ * Sama seperti reset omzet: data simulasi menumpuk lebih cepat daripada bisa
+ * dibersihkan satu per satu. Bisa dipersempit ke satu host agar percobaan satu
+ * orang tidak ikut menghapus kehadiran nyata rekannya di bulan yang sama.
+ */
+export async function resetAttendanceAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const admin = await requireAdmin();
+
+  const parsed = z
+    .object({
+      bulan: z.string().regex(/^\d{4}-\d{2}$/, "Pilih bulan yang mau direset."),
+      host: z.union([z.literal("all"), z.string().uuid()]).default("all"),
+    })
+    .safeParse({ bulan: formData.get("bulan"), host: formData.get("host") ?? "all" });
+
+  if (!parsed.success) return { error: firstIssue(parsed.error) };
+  if (!konfirmasiCocok(formData.get("confirmation"))) return { error: PESAN_KONFIRMASI };
+
+  const { bulan, host } = parsed.data;
+  const { start, end } = monthRange(bulan);
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("reset_attendance_month", {
+    period_start: start,
+    period_end: end,
+    target_host: host === "all" ? null : host,
+  });
+
+  if (error) {
+    console.error("Gagal mereset absensi", { bulan, host, error });
+    return { error: `Gagal menghapus data absensi: ${error.message}` };
+  }
+
+  const hasil = (data ?? [])[0] as
+    | { deleted_total: number; photo_paths: string[] | null }
+    | undefined;
+
+  const terhapus = hasil?.deleted_total ?? 0;
+  if (terhapus === 0) {
+    return { error: `Tidak ada catatan absensi di ${monthLabel(bulan)} yang cocok untuk dihapus.` };
+  }
+
+  await removePhotos(supabase, "attendance", hasil?.photo_paths ?? []);
+
+  await logAudit({
+    actorId: admin.id,
+    entity: "attendance",
+    action: "delete",
+    targetUserId: host === "all" ? null : host,
+    before: { period: bulan, host, records: terhapus },
+  });
+
+  revalidateAttendance();
+
+  return { success: `${terhapus} catatan absensi ${monthLabel(bulan)} dihapus.` };
 }

@@ -7,11 +7,12 @@ import { shiftEndInstant, shiftStartInstant } from "@/lib/attendance/time";
 import { logAudit } from "@/lib/auth/audit";
 import { requireAdmin } from "@/lib/auth/session";
 import { notifyUsers } from "@/lib/notifications/notify";
-import { generateSchedule } from "@/lib/scheduling/engine";
+import { generateSchedule, type SchedulingWarning } from "@/lib/scheduling/engine";
+import { resolveGenerateRange } from "@/lib/scheduling/range";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Shift } from "@/lib/types/database";
-import { formatDate } from "@/lib/utils/datetime";
-import { monthLabel, monthRange } from "@/lib/utils/period";
+import { formatDate, todayInJakarta } from "@/lib/utils/datetime";
+import { addDays, monthLabel, monthRange, weekStart } from "@/lib/utils/period";
 
 export type ActionState = { error?: string; success?: string };
 
@@ -134,15 +135,53 @@ export async function removeAssignmentAction(_prev: ActionState, formData: FormD
   return { success: "Penugasan dihapus." };
 }
 
+/**
+ * Menyusun draft jadwal untuk satu rentang tanggal.
+ *
+ * Dulu satu-satunya pilihan adalah "seluruh bulan", dan itu dua-duanya salah:
+ * menyusun ulang dari tanggal 1 padahal separuh bulan sudah berjalan, dan
+ * mengacak jadwal yang sudah benar hanya karena satu minggu perlu dibetulkan.
+ * Sekarang cakupannya dipilih admin — sisa bulan, satu bulan penuh, minggu
+ * berjalan, atau satu minggu tertentu — dan hanya rentang itu yang disentuh.
+ */
 export async function generateDraftAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const admin = await requireAdmin();
-  const month = String(formData.get("bulan") ?? "");
-  if (!month) return { error: "Periode tidak dikenal." };
 
-  const { start, end } = monthRange(month);
+  const parsed = z
+    .object({
+      bulan: z.string().regex(/^\d{4}-\d{2}$/, "Periode tidak dikenal."),
+      cakupan: z.enum(["sisa-bulan", "bulan", "minggu-ini", "minggu"]),
+      minggu: z.coerce.number().int().min(1).max(6).optional(),
+    })
+    .safeParse({
+      bulan: formData.get("bulan"),
+      cakupan: formData.get("cakupan") ?? "bulan",
+      minggu: formData.get("minggu") || undefined,
+    });
+
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Cakupan generate tidak valid." };
+
+  const { bulan: month, cakupan, minggu } = parsed.data;
+  const today = todayInJakarta();
+
+  const rentang = resolveGenerateRange({ month, scope: cakupan, weekIndex: minggu, today });
+  if (!rentang) {
+    return { error: `Cakupan itu tidak punya tanggal yang bisa disusun di ${monthLabel(month)}.` };
+  }
+
+  const { start: rangeStart, end: rangeEnd } = rentang;
+  const { start: monthStart, end: monthEnd } = monthRange(month);
+
+  // Jatah libur dan rotasi dihitung per minggu, jadi mesin penjadwalan perlu
+  // melihat minggu-minggu yang tersentuh secara utuh — termasuk hari di luar
+  // rentang. Tanpa itu, menyusun ulang satu minggu akan mengira semua orang
+  // belum bekerja sama sekali.
+  const contextStart = weekStart(rangeStart);
+  const contextEnd = addDays(weekStart(rangeEnd), 6);
+
   const supabase = await createClient();
 
-  const [{ data: hostRows }, { data: shiftRows }, { data: leaveRows }, { data: existingRows }] =
+  const [{ data: hostRows }, { data: shiftRows }, { data: leaveRows }, { data: contextRows }, { data: periodRow }] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -155,13 +194,19 @@ export async function generateDraftAction(_prev: ActionState, formData: FormData
         .from("leave_requests")
         .select("host_id, requested_date")
         .eq("status", "approved")
-        .gte("requested_date", start)
-        .lte("requested_date", end),
+        .gte("requested_date", contextStart)
+        .lte("requested_date", contextEnd),
       supabase
         .from("schedule_assignments")
         .select("id, host_id, shift_id, work_date, status, source")
-        .gte("work_date", start)
-        .lte("work_date", end),
+        .gte("work_date", contextStart)
+        .lte("work_date", contextEnd),
+      supabase
+        .from("schedule_periods")
+        .select("id, warnings")
+        .eq("start_date", monthStart)
+        .eq("end_date", monthEnd)
+        .maybeSingle(),
     ]);
 
   const hosts = (hostRows ?? []) as Pick<Profile, "id" | "weekly_day_off_quota">[];
@@ -170,24 +215,29 @@ export async function generateDraftAction(_prev: ActionState, formData: FormData
   if (hosts.length === 0) return { error: "Belum ada host aktif untuk dijadwalkan." };
   if (shifts.length === 0) return { error: "Belum ada shift aktif. Atur shift terlebih dahulu." };
 
-  const existing = existingRows ?? [];
-  const published = existing.filter((row) => row.status === "published");
-  const drafts = existing.filter((row) => row.status !== "published");
+  const context = contextRows ?? [];
+  const diRentang = (row: { work_date: string }) => row.work_date >= rangeStart && row.work_date <= rangeEnd;
 
-  // Draft lama digantikan; penugasan yang sudah dipublish tetap dipertahankan.
-  if (drafts.length > 0) {
+  // Draft lama di dalam rentang digantikan; yang di luar rentang tidak
+  // tersentuh, dan jadwal yang sudah dipublish selalu dipertahankan.
+  const draftDiganti = context.filter((row) => diRentang(row) && row.status !== "published");
+  if (draftDiganti.length > 0) {
     await supabase
       .from("schedule_assignments")
       .delete()
       .in(
         "id",
-        drafts.map((row) => row.id as string),
+        draftDiganti.map((row) => row.id as string),
       );
   }
 
+  const dipertahankan = context.filter((row) =>
+    diRentang(row) ? row.status === "published" : true,
+  );
+
   const { assignments, warnings } = generateSchedule({
-    startDate: start,
-    endDate: end,
+    startDate: rangeStart,
+    endDate: rangeEnd,
     hosts: hosts.map((host) => ({ id: host.id, weeklyDayOffQuota: host.weekly_day_off_quota })),
     shifts: shifts.map((shift) => ({
       id: shift.id,
@@ -201,23 +251,34 @@ export async function generateDraftAction(_prev: ActionState, formData: FormData
       hostId: row.host_id as string,
       date: row.requested_date as string,
     })),
-    existingAssignments: published.map((row) => ({
+    existingAssignments: dipertahankan.map((row) => ({
       hostId: row.host_id as string,
       shiftId: row.shift_id as string,
       workDate: row.work_date as string,
     })),
   });
 
-  // Satu periode per rentang tanggal — generate ulang menimpa draft sebelumnya.
+  // Peringatan disimpan per bulan, sedangkan generate boleh mengenai sebagian
+  // bulan saja. Yang di luar rentang dipertahankan apa adanya — kalau ditimpa,
+  // shift kurang host di minggu lain akan hilang dari layar tanpa dibereskan.
+  const warningLama = ((periodRow?.warnings ?? []) as SchedulingWarning[]).filter(
+    (item) => item.work_date < rangeStart || item.work_date > rangeEnd,
+  );
+  const warningGabungan = [...warningLama, ...warnings].sort((a, b) =>
+    a.work_date.localeCompare(b.work_date),
+  );
+
+  // Satu periode per bulan, bukan per rentang generate: publish dan reset
+  // bekerja dalam satuan bulan, jadi barisnya harus tetap satu.
   const { data: period } = await supabase
     .from("schedule_periods")
     .upsert(
       {
-        start_date: start,
-        end_date: end,
+        start_date: monthStart,
+        end_date: monthEnd,
         status: "draft",
         generated_at: new Date().toISOString(),
-        warnings,
+        warnings: warningGabungan,
       },
       { onConflict: "start_date,end_date" },
     )
@@ -237,7 +298,7 @@ export async function generateDraftAction(_prev: ActionState, formData: FormData
         source: "auto" as const,
       })),
     );
-    if (error) return { error: "Gagal menyimpan draft jadwal." };
+    if (error) return { error: `Gagal menyimpan draft jadwal: ${error.message}` };
   }
 
   await logAudit({
@@ -245,17 +306,27 @@ export async function generateDraftAction(_prev: ActionState, formData: FormData
     entity: "schedule",
     action: "create",
     entityId: periodId,
-    after: { period: month, assignments: assignments.length, warnings: warnings.length },
+    after: {
+      period: month,
+      scope: cakupan,
+      range: `${rangeStart}..${rangeEnd}`,
+      assignments: assignments.length,
+      replaced_drafts: draftDiganti.length,
+      warnings: warnings.length,
+    },
   });
 
   revalidateSchedule();
 
-  return {
-    success:
-      warnings.length === 0
-        ? `Draft ${monthLabel(month)} dibuat: ${assignments.length} penugasan.`
-        : `Draft ${monthLabel(month)} dibuat: ${assignments.length} penugasan, ${warnings.length} shift masih kurang host.`,
-  };
+  const rentangLabel =
+    rangeStart === monthStart && rangeEnd === monthEnd
+      ? monthLabel(month)
+      : `${formatDate(rangeStart)} – ${formatDate(rangeEnd)}`;
+
+  const kurang =
+    warnings.length > 0 ? `, ${warnings.length} shift masih kurang host` : "";
+
+  return { success: `Draft ${rentangLabel} dibuat: ${assignments.length} penugasan${kurang}.` };
 }
 
 export async function publishScheduleAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

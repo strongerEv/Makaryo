@@ -1,6 +1,6 @@
 "use client";
 
-import { Send, Sparkles } from "lucide-react";
+import { Send } from "lucide-react";
 import { useActionState } from "react";
 
 import {
@@ -9,6 +9,7 @@ import {
   resetScheduleAction,
   type ActionState,
 } from "@/app/admin/jadwal/actions";
+import { GenerateScheduleDialog } from "@/app/admin/jadwal/generate-schedule-dialog";
 import { ResetScheduleDialog, type MonthCount } from "@/app/admin/jadwal/reset-schedule-dialog";
 import { Alert } from "@/components/ui/alert";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -17,10 +18,13 @@ const INITIAL: ActionState = {};
 
 export function ScheduleToolbar({
   month,
+  today,
   draftCount,
   monthCounts,
 }: {
   month: string;
+  /** Hari ini menurut WIB, dihitung di server agar tidak berbeda saat hidrasi. */
+  today: string;
   draftCount: number;
   /** Isi tiap bulan, supaya dialog reset bisa menunjukkan dampaknya lebih dulu. */
   monthCounts: Record<string, MonthCount>;
@@ -29,21 +33,20 @@ export function ScheduleToolbar({
   const [publishState, publish] = useActionState(publishScheduleAction, INITIAL);
   const [resetState, reset] = useActionState(resetScheduleAction, INITIAL);
 
-  // Galat reset tampil di dalam dialognya sendiri supaya terbaca saat formulir
-  // masih terbuka; di sini cukup pesan berhasilnya.
-  const error = generateState.error ?? publishState.error;
+  // Galat generate dan reset tampil di dalam dialognya masing-masing supaya
+  // terbaca saat formulirnya masih terbuka; di sini cukup pesan berhasilnya.
+  const error = publishState.error;
   const success = generateState.success ?? publishState.success ?? resetState.success;
 
   return (
     <div className="w-full space-y-2 sm:w-auto">
       <div className="flex flex-wrap gap-2">
-        <form action={generate}>
-          <input type="hidden" name="bulan" value={month} />
-          <SubmitButton variant="soft" pendingLabel="Menyusun…">
-            <Sparkles className="size-4" aria-hidden />
-            Generate draft
-          </SubmitButton>
-        </form>
+        <GenerateScheduleDialog
+          month={month}
+          today={today}
+          state={generateState}
+          formAction={generate}
+        />
 
         <form action={publish}>
           <input type="hidden" name="bulan" value={month} />

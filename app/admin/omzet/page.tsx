@@ -16,8 +16,9 @@ import { createClient } from "@/lib/supabase/server";
 import type { Profile, Shift } from "@/lib/types/database";
 import { formatCurrency } from "@/lib/utils/format";
 import { todayInJakarta } from "@/lib/utils/datetime";
-import { currentMonth, eachDate, monthRange, recentMonths } from "@/lib/utils/period";
+import { currentMonth, eachDate, monthRange, recentMonths, shiftMonth } from "@/lib/utils/period";
 import { LiveSync } from "@/lib/realtime/live-sync";
+import { ResetRevenueDialog, type RevenueMonthCount } from "./reset-revenue-dialog";
 
 export const metadata: Metadata = { title: "Omzet" };
 
@@ -40,20 +41,36 @@ export default async function AdminRevenuePage({
 
   if (host !== "all") query = query.eq("host_id", host);
 
-  const [{ data: reportRows }, { data: hostRows }, { data: shiftRows }] = await Promise.all([
-    query,
-    supabase
-      .from("profiles")
-      .select("*")
-      .eq("role", "host")
-      .eq("account_status", "active")
-      .order("full_name"),
-    supabase.from("shifts").select("*").eq("is_active", true).order("sort_order"),
-  ]);
+  const [{ data: reportRows }, { data: hostRows }, { data: shiftRows }, { data: monthCountRows }] =
+    await Promise.all([
+      query,
+      supabase
+        .from("profiles")
+        .select("*")
+        .eq("role", "host")
+        .eq("account_status", "active")
+        .order("full_name"),
+      supabase.from("shifts").select("*").eq("is_active", true).order("sort_order"),
+      // Ringkasan per bulan untuk dialog reset — hanya angkanya, bukan barisnya.
+      supabase.rpc("revenue_month_counts", {
+        from_month: monthRange(shiftMonth(currentMonth(), -12)).start,
+        to_month: monthRange(shiftMonth(currentMonth(), 1)).start,
+      }),
+    ]);
 
   const reports = (reportRows ?? []) as unknown as RevenueRow[];
   const hosts = (hostRows ?? []) as Profile[];
   const shifts = (shiftRows ?? []) as Shift[];
+
+  // Sama seperti halaman absensi: bulan dari alamat belum tentu berbentuk
+  // YYYY-MM, dan dialog reset tidak boleh menargetkan bulan yang tidak terlihat.
+  const bulanReset = /^\d{4}-\d{2}$/.test(bulan) ? bulan : currentMonth();
+
+  const monthCounts: Record<string, RevenueMonthCount> = Object.fromEntries(
+    ((monthCountRows ?? []) as { month: string; report_count: number; total_amount: number | string }[]).map(
+      (row) => [row.month, { reports: row.report_count, amount: Number(row.total_amount) }],
+    ),
+  );
 
   const proofs = await signPhotoUrls(
     supabase,
@@ -78,7 +95,17 @@ export default async function AdminRevenuePage({
     <>
       <LiveSync tables={["revenue_reports"]} />
 
-      <PageHeader title="Omzet" description="Rekap laporan omzet seluruh host." />
+      <PageHeader
+        title="Omzet"
+        description="Rekap laporan omzet seluruh host."
+        action={
+          <ResetRevenueDialog
+            defaultMonth={bulanReset}
+            counts={monthCounts}
+            hosts={hosts.map((item) => ({ id: item.id, name: item.full_name }))}
+          />
+        }
+      />
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Total periode" value={formatCurrency(total)} icon={Wallet} tone="sky" />
@@ -133,7 +160,11 @@ export default async function AdminRevenuePage({
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <Card className="p-0">
           <div className="p-5">
-            <CardHeader className="mb-0" title="Daftar laporan" description="Klik ikon pensil untuk merevisi." />
+            <CardHeader
+              className="mb-0"
+              title="Daftar laporan"
+              description="Ikon pensil untuk merevisi, ikon tong sampah untuk menghapus."
+            />
           </div>
 
           {reports.length === 0 ? (
@@ -143,7 +174,7 @@ export default async function AdminRevenuePage({
               description="Laporan dari host akan muncul di sini."
             />
           ) : (
-            <RevenueList reports={reports} proofs={proofs} shifts={shifts} canEdit showHost />
+            <RevenueList reports={reports} proofs={proofs} shifts={shifts} canEdit canDelete showHost />
           )}
         </Card>
 

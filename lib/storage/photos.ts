@@ -62,3 +62,22 @@ export async function signPhotoUrls(
   });
   return map;
 }
+
+/**
+ * Menghapus berkas yang barisnya sudah hilang dari database.
+ *
+ * Kegagalannya sengaja tidak dilempar: berkas yatim di storage tidak merusak
+ * apa pun, sedangkan membatalkan penghapusan yang sudah terjadi di database
+ * justru mustahil. Cukup dicatat supaya bisa dibersihkan belakangan.
+ */
+export async function removePhotos(
+  supabase: SupabaseClient,
+  bucket: PhotoBucket,
+  paths: (string | null | undefined)[],
+) {
+  const daftar = [...new Set(paths.filter((path): path is string => Boolean(path)))];
+  if (daftar.length === 0) return;
+
+  const { error } = await supabase.storage.from(bucket).remove(daftar);
+  if (error) console.error("Gagal menghapus berkas", { bucket, jumlah: daftar.length, error });
+}
