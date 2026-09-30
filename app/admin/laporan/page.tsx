@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { FileSpreadsheet, FileText } from "lucide-react";
+import { FileSpreadsheet, FileText, Receipt } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardHeader } from "@/components/ui/card";
@@ -33,7 +33,7 @@ export default async function ReportsPage() {
         <Card>
           <CardHeader
             title="Laporan absensi"
-            description="Berisi jam clock in/out, status kehadiran, keterlambatan, dan durasi kerja."
+            description="Dipisah per nama — satu halaman PDF dan satu sheet Excel untuk tiap host."
           />
           <ExportPanel endpoint="/api/export/absensi" hosts={hosts} />
         </Card>
@@ -52,11 +52,17 @@ export default async function ReportsPage() {
         <ul className="space-y-2 text-[13px] text-ink-muted">
           <li className="flex gap-2">
             <FileText className="mt-0.5 size-4 shrink-0 text-coral" aria-hidden />
-            PDF cocok untuk arsip dan lampiran — sudah berisi ringkasan total di baris terakhir.
+            PDF absensi memberi satu halaman per host, jadi lembarannya bisa langsung dipotong dan
+            diserahkan ke orangnya. Halaman pertama berisi ringkasan seluruh tim.
           </li>
           <li className="flex gap-2">
             <FileSpreadsheet className="mt-0.5 size-4 shrink-0 text-emerald" aria-hidden />
-            Excel cocok bila datanya masih ingin diolah lagi, misalnya untuk perhitungan bonus.
+            Excel absensi memberi satu sheet per nama, plus sheet Ringkasan di depan — enak dipakai
+            lagi untuk perhitungan bonus.
+          </li>
+          <li className="flex gap-2">
+            <Receipt className="mt-0.5 size-4 shrink-0 text-sky" aria-hidden />
+            Laporan omzet masih satu tabel gabungan dengan kolom host.
           </li>
         </ul>
       </Card>

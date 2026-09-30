@@ -27,7 +27,14 @@ export async function GET(request: NextRequest) {
   const hostId = request.nextUrl.searchParams.get("host") ?? "all";
 
   const { rows, meta } = await fetchAttendanceReport(supabase, { month, hostId });
-  const fileName = `laporan-absensi-${month}${hostId === "all" ? "" : "-per-host"}.${format}`;
+
+  // Berkas satu host diberi namanya, bukan penanda "-per-host" yang kini justru
+  // menyesatkan: berkas untuk semua host pun sudah dipecah per orang di dalamnya.
+  const slug = meta.hostLabel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  const fileName = `laporan-absensi-${month}${hostId === "all" ? "" : `-${slug}`}.${format}`;
 
   const body =
     format === "pdf" ? await buildAttendancePdf(rows, meta) : await buildAttendanceWorkbook(rows, meta);

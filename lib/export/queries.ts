@@ -13,15 +13,75 @@ export type ReportFilter = {
 };
 
 export type AttendanceReportRow = {
+  hostId: string;
   date: string;
   hostName: string;
   clockIn: string;
   clockOut: string;
+  /** Label siap tampil, mis. "Tepat waktu". */
   status: string;
+  /** Nilai mentahnya, dipakai menghitung rekap — label bisa berubah kapan saja. */
+  statusKey: AttendanceStatus;
   lateMinutes: number;
   duration: string;
   workedMinutes: number;
 };
+
+export type AttendanceTotals = {
+  records: number;
+  onTime: number;
+  late: number;
+  absent: number;
+  lateMinutes: number;
+  workedMinutes: number;
+};
+
+export type HostAttendanceGroup = {
+  hostId: string;
+  hostName: string;
+  rows: AttendanceReportRow[];
+  totals: AttendanceTotals;
+};
+
+export function sumAttendance(rows: AttendanceReportRow[]): AttendanceTotals {
+  return {
+    records: rows.length,
+    onTime: rows.filter((row) => row.statusKey === "on_time").length,
+    late: rows.filter((row) => row.statusKey === "late").length,
+    absent: rows.filter((row) => row.statusKey === "absent").length,
+    lateMinutes: rows.reduce((sum, row) => sum + row.lateMinutes, 0),
+    workedMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0),
+  };
+}
+
+/**
+ * Memecah baris absensi menjadi satu kelompok per host.
+ *
+ * Laporan lama menumpuk semua orang dalam satu tabel dengan kolom nama, jadi
+ * untuk melihat catatan satu orang harus disaring sendiri dulu. Dipecah di sini
+ * supaya PDF maupun Excel memakai pengelompokan dan urutan yang sama persis.
+ *
+ * Dikelompokkan lewat id, bukan nama: dua host bisa bernama sama, dan menggabung
+ * catatan mereka jadi satu tabel lebih buruk daripada dua tabel berjudul sama.
+ */
+export function groupAttendanceByHost(rows: AttendanceReportRow[]): HostAttendanceGroup[] {
+  const kelompok = new Map<string, AttendanceReportRow[]>();
+
+  for (const row of rows) {
+    const daftar = kelompok.get(row.hostId);
+    if (daftar) daftar.push(row);
+    else kelompok.set(row.hostId, [row]);
+  }
+
+  return [...kelompok.entries()]
+    .map(([hostId, daftar]) => ({
+      hostId,
+      hostName: daftar[0].hostName,
+      rows: daftar,
+      totals: sumAttendance(daftar),
+    }))
+    .sort((a, b) => a.hostName.localeCompare(b.hostName, "id"));
+}
 
 export type RevenueReportRow = {
   date: string;
@@ -61,11 +121,13 @@ export async function fetchAttendanceReport(supabase: SupabaseClient, filter: Re
   const rows: AttendanceReportRow[] = (data ?? []).map((row) => {
     const profile = row.profiles as unknown as { full_name: string } | null;
     return {
+      hostId: row.host_id as string,
       date: formatDate(row.work_date as string),
       hostName: profile?.full_name ?? "Host",
       clockIn: row.clock_in_at ? formatTime(row.clock_in_at as string) : "—",
       clockOut: row.clock_out_at ? formatTime(row.clock_out_at as string) : "—",
       status: ATTENDANCE_STATUS_LABEL[row.status as AttendanceStatus],
+      statusKey: row.status as AttendanceStatus,
       lateMinutes: (row.late_minutes as number) ?? 0,
       duration: formatDuration((row.worked_minutes as number) ?? 0),
       workedMinutes: (row.worked_minutes as number) ?? 0,
