@@ -1,3 +1,5 @@
+import { inflateSync } from "node:zlib";
+
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 
@@ -22,13 +24,21 @@ function baris(overrides: Partial<AttendanceReportRow> & { hostId: string; hostN
     lateMinutes: 0,
     duration: "7 jam",
     workedMinutes: 420,
+    note: "",
     ...overrides,
   };
 }
 
 const contoh: AttendanceReportRow[] = [
   baris({ hostId: "h-2", hostName: "Budi Santoso" }),
-  baris({ hostId: "h-1", hostName: "Ani Lestari", statusKey: "late", status: "Telat", lateMinutes: 12 }),
+  baris({
+    hostId: "h-1",
+    hostName: "Ani Lestari",
+    statusKey: "late",
+    status: "Telat",
+    lateMinutes: 12,
+    note: "Sakit, izin pulang setelah jam 12.",
+  }),
   baris({ hostId: "h-2", hostName: "Budi Santoso", date: "2 September 2026", workedMinutes: 300 }),
 ];
 
@@ -104,6 +114,16 @@ describe("buildAttendanceWorkbook", () => {
     expect(nama).toContain("Ringkasan");
   });
 
+  it("membawa catatan absensi ke kolom terakhir", async () => {
+    const buffer = await buildAttendanceWorkbook(contoh, meta);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(new Uint8Array(buffer).buffer as ArrayBuffer);
+
+    const sheet = workbook.getWorksheet("Ani Lestari");
+    expect(sheet?.getRow(4).getCell(7).value).toBe("Catatan");
+    expect(sheet?.getRow(5).getCell(7).value).toBe("Sakit, izin pulang setelah jam 12.");
+  });
+
   it("tetap menghasilkan berkas yang sah saat periodenya kosong", async () => {
     // Buku kerja tanpa satu lembar pun ditolak Excel saat dibuka.
     expect(await namaSheet([])).toEqual(["Ringkasan"]);
@@ -119,6 +139,32 @@ describe("buildAttendancePdf", () => {
   it("memberi satu halaman untuk tiap host, plus halaman ringkasan", async () => {
     const pdf = await buildAttendancePdf(contoh, meta);
     expect(jumlahHalaman(pdf)).toBe(3);
+  });
+
+  /** Teks PDF disimpan sebagai untaian heksa di dalam array TJ. */
+  function teks(buffer: Buffer) {
+    const raw = buffer.toString("latin1");
+    const potong: string[] = [];
+    const re = /stream\r?\n/g;
+    let m: RegExpExecArray | null;
+
+    while ((m = re.exec(raw))) {
+      if (raw.slice(m.index - 3, m.index) === "end") continue;
+      const mulai = m.index + m[0].length;
+      const isi = inflateSync(buffer.subarray(mulai, raw.indexOf("endstream", mulai))).toString("latin1");
+      potong.push(
+        ...[...isi.matchAll(/<([0-9A-Fa-f]+)>/g)].map((t) => Buffer.from(t[1], "hex").toString("latin1")),
+      );
+    }
+
+    return potong.join("");
+  }
+
+  it("mencetak catatan absensi di halaman orangnya", async () => {
+    const isi = teks(await buildAttendancePdf(contoh, meta));
+
+    expect(isi).toContain("Catatan");
+    expect(isi).toContain("Sakit, izin pulang setelah jam 12.");
   });
 
   it("tidak menyisipkan halaman ringkasan bila hanya satu host", async () => {

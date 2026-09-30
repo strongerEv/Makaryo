@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarX2, ChevronRight, MapPinOff } from "lucide-react";
+import { CalendarX2, ChevronRight, MapPinOff, StickyNote } from "lucide-react";
 import { useState } from "react";
 
 import { AttendanceCorrectionDialog } from "@/app/admin/absensi/attendance-correction-dialog";
@@ -57,6 +57,12 @@ export function AttendanceRows({ rows }: { rows: AdminAttendanceRow[] }) {
                 <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <PhotoCue label="Clock in" url={detail.clockInPhotoUrl} />
                   <PhotoCue label="Clock out" url={detail.clockOutPhotoUrl} />
+                  {detail.note ? (
+                    <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
+                      <StickyNote className="size-3 shrink-0" aria-hidden />
+                      <span className="truncate">{detail.note}</span>
+                    </span>
+                  ) : null}
                   {detail.clockInLat === null || detail.clockInLng === null ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-soft px-2 py-0.5 text-[11px] font-medium text-[#9a6a12]">
                       <MapPinOff className="size-3" aria-hidden />
@@ -76,7 +82,12 @@ export function AttendanceRows({ rows }: { rows: AdminAttendanceRow[] }) {
         ))}
       </ul>
 
-      <AttendanceDetailSheet detail={dipilih} open={dipilih !== null} onClose={() => setDipilih(null)} />
+      <AttendanceDetailSheet
+        detail={dipilih}
+        open={dipilih !== null}
+        onClose={() => setDipilih(null)}
+        canEditNote
+      />
     </>
   );
 }

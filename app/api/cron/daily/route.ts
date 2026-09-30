@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   // 1. Tutup otomatis absensi yang lupa clock out.
   const { data: openAttendances } = await admin
     .from("attendances")
-    .select("id, clock_in_at, work_date, schedule_assignments(shifts(start_time, end_time))")
+    .select("id, clock_in_at, work_date, note, schedule_assignments(shifts(start_time, end_time))")
     .is("clock_out_at", null)
     .not("clock_in_at", "is", null)
     .gte("work_date", since)
@@ -59,7 +59,12 @@ export async function GET(request: NextRequest) {
         clock_out_at: endsAt.toISOString(),
         worked_minutes: workedMinutesBetween(attendance.clock_in_at as string, endsAt),
         auto_closed: true,
-        note: "Clock out otomatis di jam berakhirnya shift karena host tidak clock out.",
+        // Catatan yang sudah ditulis host atau admin tidak boleh tertimpa —
+        // alasannya (mis. sakit) justru yang paling perlu terbaca di laporan.
+        // Tanda auto_closed sendiri sudah tampil sebagai lencana tersendiri.
+        note:
+          (attendance.note as string | null) ??
+          "Clock out otomatis di jam berakhirnya shift karena host tidak clock out.",
       })
       .eq("id", attendance.id as string);
 

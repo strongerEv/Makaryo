@@ -1,11 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
+import { MAX_PANJANG_CATATAN } from "@/lib/attendance/note";
 import { evaluateClockIn, workedMinutesBetween } from "@/lib/attendance/status";
-import { requireHost } from "@/lib/auth/session";
+import { logAudit } from "@/lib/auth/audit";
+import { requireActiveProfile, requireHost } from "@/lib/auth/session";
 import { uploadPhoto } from "@/lib/storage/photos";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/types/database";
 import { todayInJakarta } from "@/lib/utils/datetime";
 
 export type AttendanceResult = { error?: string; success?: string };
@@ -146,4 +150,77 @@ export async function clockOutAction(formData: FormData): Promise<AttendanceResu
   revalidatePath("/absen");
   revalidatePath("/beranda");
   return { success: "Clock out tercatat. Terima kasih!" };
+}
+
+const noteSchema = z.object({
+  attendanceId: z.string().uuid("Data absensi tidak dikenal."),
+  note: z.string().trim().max(MAX_PANJANG_CATATAN, `Catatan maksimal ${MAX_PANJANG_CATATAN} karakter.`),
+});
+
+/**
+ * Menyimpan catatan pada satu baris absensi.
+ *
+ * Dipakai host maupun admin dari dialog pratinjau yang sama. Sebelumnya catatan
+ * hanya bisa diisi admin, dan itu lewat formulir koreksi jam — padahal alasan
+ * yang paling sering perlu dicatat justru datang dari orangnya sendiri: sakit,
+ * pulang lebih awal, atau telat karena sesuatu. Sekarang keduanya bisa menulis
+ * di tempat yang sama, dan isinya ikut terbawa ke berkas ekspor.
+ *
+ * Host hanya boleh menyentuh barisnya sendiri; pemeriksaannya dilakukan di sini
+ * dan diperkuat lagi oleh aturan baris di database.
+ */
+export async function saveAttendanceNoteAction(
+  _prev: AttendanceResult,
+  formData: FormData,
+): Promise<AttendanceResult> {
+  const profile = await requireActiveProfile();
+
+  const parsed = noteSchema.safeParse({
+    attendanceId: formData.get("attendanceId"),
+    note: formData.get("note") ?? "",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Catatan tidak valid." };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("attendances")
+    .select("id, host_id, work_date, note")
+    .eq("id", parsed.data.attendanceId)
+    .single();
+
+  if (!before) return { error: "Data absensi tidak ditemukan." };
+
+  const admin = isAdminRole(profile.role);
+  if (!admin && before.host_id !== profile.id) {
+    return { error: "Kamu hanya bisa menulis catatan pada absensimu sendiri." };
+  }
+
+  // Catatan kosong berarti dihapus, bukan disimpan sebagai untaian kosong —
+  // supaya bagian tampilan yang memeriksa "ada catatan atau tidak" tetap benar.
+  const note = parsed.data.note || null;
+  if (note === before.note) return { success: "Catatan tidak berubah." };
+
+  const { error } = await supabase
+    .from("attendances")
+    .update({ note })
+    .eq("id", parsed.data.attendanceId);
+
+  if (error) return { error: `Gagal menyimpan catatan: ${error.message}` };
+
+  await logAudit({
+    actorId: profile.id,
+    entity: "attendance",
+    action: "update",
+    entityId: parsed.data.attendanceId,
+    targetUserId: before.host_id as string,
+    before: { note: before.note },
+    after: { note },
+  });
+
+  revalidatePath("/absen");
+  revalidatePath("/absen/riwayat");
+  revalidatePath("/beranda");
+  revalidatePath("/admin/absensi");
+
+  return { success: note ? "Catatan tersimpan." : "Catatan dihapus." };
 }

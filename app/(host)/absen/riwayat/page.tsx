@@ -79,7 +79,7 @@ export default async function AttendanceHistoryPage({
       </div>
 
       <Card className="p-0">
-        <AttendanceHistoryList items={details} />
+        <AttendanceHistoryList items={details} canEditNote />
       </Card>
     </>
   );

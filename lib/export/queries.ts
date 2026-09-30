@@ -25,6 +25,7 @@ export type AttendanceReportRow = {
   lateMinutes: number;
   duration: string;
   workedMinutes: number;
+  note: string;
 };
 
 export type AttendanceTotals = {
@@ -131,6 +132,7 @@ export async function fetchAttendanceReport(supabase: SupabaseClient, filter: Re
       lateMinutes: (row.late_minutes as number) ?? 0,
       duration: formatDuration((row.worked_minutes as number) ?? 0),
       workedMinutes: (row.worked_minutes as number) ?? 0,
+      note: (row.note as string) ?? "",
     };
   });
 

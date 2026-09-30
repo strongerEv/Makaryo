@@ -9,8 +9,19 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatDuration } from "@/lib/attendance/status";
 import { formatDateShort, formatTimeShort } from "@/lib/utils/datetime";
 
-/** Daftar riwayat absensi host; tiap baris bisa diklik untuk melihat detailnya. */
-export function AttendanceHistoryList({ items }: { items: AttendanceDetail[] }) {
+/**
+ * Daftar riwayat absensi; tiap baris bisa diklik untuk melihat detailnya.
+ *
+ * `canEditNote` dibiarkan bisa dimatikan karena daftar ini juga dipakai untuk
+ * menampilkan riwayat orang lain, yang tidak boleh disunting pembacanya.
+ */
+export function AttendanceHistoryList({
+  items,
+  canEditNote,
+}: {
+  items: AttendanceDetail[];
+  canEditNote?: boolean;
+}) {
   const [dipilih, setDipilih] = useState<AttendanceDetail | null>(null);
 
   if (items.length === 0) {
@@ -68,7 +79,12 @@ export function AttendanceHistoryList({ items }: { items: AttendanceDetail[] }) 
         ))}
       </ul>
 
-      <AttendanceDetailSheet detail={dipilih} open={dipilih !== null} onClose={() => setDipilih(null)} />
+      <AttendanceDetailSheet
+        detail={dipilih}
+        open={dipilih !== null}
+        onClose={() => setDipilih(null)}
+        canEditNote={canEditNote}
+      />
     </>
   );
 }

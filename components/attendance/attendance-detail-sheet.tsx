@@ -1,9 +1,16 @@
 "use client";
 
-import { Clock3, ImageOff, MapPin, StickyNote, Timer } from "lucide-react";
+import { Clock3, ImageOff, MapPin, Pencil, StickyNote, Timer } from "lucide-react";
+import { useActionState, useEffect, useState } from "react";
 
-import { AttendanceStatusBadge } from "@/components/ui/attendance-badge";
+import { saveAttendanceNoteAction, type AttendanceResult } from "@/app/(host)/absen/actions";
+import { Alert } from "@/components/ui/alert";
+import { buttonClass } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/field";
 import { Modal } from "@/components/ui/modal";
+import { SubmitButton } from "@/components/ui/submit-button";
+import { AttendanceStatusBadge } from "@/components/ui/attendance-badge";
+import { MAX_PANJANG_CATATAN } from "@/lib/attendance/note";
 import { formatDuration } from "@/lib/attendance/status";
 import type { AttendanceStatus } from "@/lib/types/database";
 import { formatClock, formatDate, formatTime } from "@/lib/utils/datetime";
@@ -38,10 +45,13 @@ export function AttendanceDetailSheet({
   detail,
   open,
   onClose,
+  canEditNote,
 }: {
   detail: AttendanceDetail | null;
   open: boolean;
   onClose: () => void;
+  /** Host untuk absensinya sendiri, admin untuk siapa pun. */
+  canEditNote?: boolean;
 }) {
   if (!detail) return null;
 
@@ -99,7 +109,9 @@ export function AttendanceDetailSheet({
           />
         </div>
 
-        {detail.note ? (
+        {canEditNote ? (
+          <NoteEditor attendanceId={detail.id} note={detail.note} />
+        ) : detail.note ? (
           <div className="flex gap-2.5 rounded-[var(--radius-md)] bg-surface-muted p-4">
             <StickyNote className="mt-px size-4 shrink-0 text-ink-muted" aria-hidden />
             <div className="min-w-0">
@@ -110,6 +122,114 @@ export function AttendanceDetailSheet({
         ) : null}
       </div>
     </Modal>
+  );
+}
+
+const INITIAL: AttendanceResult = {};
+
+/**
+ * Catatan yang bisa ditulis langsung dari pratinjau.
+ *
+ * Menampilkan isinya lebih dulu dan baru membuka kotak tulis saat diminta:
+ * sebagian besar kunjungan ke dialog ini cuma ingin membaca, dan textarea yang
+ * selalu terbuka membuat isian yang sudah ada tampak seperti draf yang belum
+ * tersimpan.
+ */
+function NoteEditor({ attendanceId, note }: { attendanceId: string; note: string | null }) {
+  const [state, simpan] = useActionState(saveAttendanceNoteAction, INITIAL);
+  const [menulis, setMenulis] = useState(false);
+  // Nilai yang ditampilkan setelah tersimpan. Baris aslinya baru ikut berubah
+  // pada muat ulang berikutnya, sedangkan dialognya memegang salinan lama.
+  const [tersimpan, setTersimpan] = useState(note);
+  const [draf, setDraf] = useState(note ?? "");
+
+  useEffect(() => {
+    setTersimpan(note);
+    setDraf(note ?? "");
+    setMenulis(false);
+  }, [attendanceId, note]);
+
+  useEffect(() => {
+    if (!state.success) return;
+    setTersimpan(draf.trim() || null);
+    setMenulis(false);
+    // Sengaja tidak ikut memperhatikan draf: efek ini hanya menutup kotak tulis
+    // sesudah penyimpanan berhasil, bukan tiap ketukan tombol.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.success]);
+
+  return (
+    <div className="rounded-[var(--radius-md)] bg-surface-muted p-4">
+      <div className="flex items-start gap-2.5">
+        <StickyNote className="mt-px size-4 shrink-0 text-ink-muted" aria-hidden />
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[12px] font-semibold text-ink-muted">Catatan</p>
+
+          {menulis ? null : (
+            <p
+              className={`mt-0.5 text-[13px] leading-relaxed break-words ${
+                tersimpan ? "text-ink" : "text-ink-muted"
+              }`}
+            >
+              {tersimpan ?? "Belum ada catatan. Misalnya: sakit, pulang lebih awal, atau alasan telat."}
+            </p>
+          )}
+        </div>
+
+        {menulis ? null : (
+          <button
+            type="button"
+            onClick={() => setMenulis(true)}
+            className={buttonClass({ variant: "ghost", size: "sm" })}
+          >
+            <Pencil className="size-4" aria-hidden />
+            {tersimpan ? "Ubah" : "Tulis"}
+          </button>
+        )}
+      </div>
+
+      {state.error ? (
+        <Alert tone="error" className="mt-3">
+          {state.error}
+        </Alert>
+      ) : null}
+
+      {menulis ? (
+        <form action={simpan} className="mt-3 space-y-3">
+          <input type="hidden" name="attendanceId" value={attendanceId} />
+
+          <Textarea
+            name="note"
+            rows={3}
+            maxLength={MAX_PANJANG_CATATAN}
+            value={draf}
+            onChange={(event) => setDraf(event.target.value)}
+            placeholder="Contoh: Sakit, izin pulang setelah jam 12."
+            aria-label="Catatan absensi"
+          />
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <span className="tabular mr-auto text-[11px] text-ink-muted">
+              {draf.length}/{MAX_PANJANG_CATATAN}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setDraf(tersimpan ?? "");
+                setMenulis(false);
+              }}
+              className={buttonClass({ variant: "ghost", size: "sm" })}
+            >
+              Batal
+            </button>
+            <SubmitButton size="sm" pendingLabel="Menyimpan…">
+              Simpan catatan
+            </SubmitButton>
+          </div>
+        </form>
+      ) : null}
+    </div>
   );
 }
 

@@ -67,8 +67,8 @@ function ReportHeader({ meta }: { meta: ReportMeta }) {
 }
 
 /** Kolom tabel per orang — tanpa kolom "Host", karena namanya sudah jadi judul. */
-const HOST_WIDTHS = ["24%", "15%", "15%", "20%", "10%", "16%"];
-const HOST_HEADERS = ["Tanggal", "Clock in", "Clock out", "Status", "Telat", "Durasi"];
+const HOST_WIDTHS = ["17%", "10%", "10%", "13%", "7%", "13%", "30%"];
+const HOST_HEADERS = ["Tanggal", "Clock in", "Clock out", "Status", "Telat", "Durasi", "Catatan"];
 
 function HostPage({ group, meta }: { group: HostAttendanceGroup; meta: ReportMeta }) {
   return (
@@ -90,14 +90,15 @@ function HostPage({ group, meta }: { group: HostAttendanceGroup; meta: ReportMet
           <Text style={[styles.cell, { width: HOST_WIDTHS[3] }]}>{row.status}</Text>
           <Text style={[styles.cell, { width: HOST_WIDTHS[4] }]}>{row.lateMinutes}</Text>
           <Text style={[styles.cell, { width: HOST_WIDTHS[5] }]}>{row.duration}</Text>
+          <Text style={[styles.cell, { width: HOST_WIDTHS[6] }]}>{row.note}</Text>
         </View>
       ))}
 
       <View style={styles.totalRow}>
-        <Text style={[styles.bold, { width: "34%" }]}>{group.totals.records} catatan</Text>
-        <Text style={[styles.bold, { width: "30%" }]}>{group.totals.late} kali telat</Text>
+        <Text style={[styles.bold, { width: "27%" }]}>{group.totals.records} catatan</Text>
+        <Text style={[styles.bold, { width: "23%" }]}>{group.totals.late} kali telat</Text>
         <Text style={[styles.bold, { width: "20%" }]}>{group.totals.lateMinutes} menit</Text>
-        <Text style={[styles.bold, { width: "16%" }]}>{jamMenit(group.totals.workedMinutes)}</Text>
+        <Text style={[styles.bold, { width: "30%" }]}>{jamMenit(group.totals.workedMinutes)}</Text>
       </View>
 
       <Footer />

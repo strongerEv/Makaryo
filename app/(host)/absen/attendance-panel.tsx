@@ -143,6 +143,7 @@ export function AttendancePanel({
         detail={preview}
         open={preview !== null}
         onClose={() => setPreview(null)}
+        canEditNote
       />
 
       <CameraCapture

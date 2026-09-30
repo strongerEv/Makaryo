@@ -128,14 +128,33 @@ export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta:
       name: sheetName(group.hostName, dipakai),
       heading: group.hostName,
       subtitle: `${meta.title} · Dibuat: ${meta.generatedAt}`,
+      columns: 7,
     });
 
     // Kolom "Host" sengaja dibuang: namanya sudah jadi judul lembarnya.
-    const header = sheet.addRow(["Tanggal", "Clock in", "Clock out", "Status", "Telat (menit)", "Durasi"]);
+    const header = sheet.addRow([
+      "Tanggal",
+      "Clock in",
+      "Clock out",
+      "Status",
+      "Telat (menit)",
+      "Durasi",
+      "Catatan",
+    ]);
     styleHeader(header);
 
     group.rows.forEach((row) => {
-      sheet.addRow([row.date, row.clockIn, row.clockOut, row.status, row.lateMinutes, row.duration]);
+      const added = sheet.addRow([
+        row.date,
+        row.clockIn,
+        row.clockOut,
+        row.status,
+        row.lateMinutes,
+        row.duration,
+        row.note,
+      ]);
+      // Catatan bisa beberapa kalimat; dibungkus supaya tidak melebar ke samping.
+      added.getCell(7).alignment = { wrapText: true, vertical: "top" };
     });
 
     const summary = sheet.addRow([
@@ -145,11 +164,12 @@ export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta:
       `${group.totals.late} kali telat`,
       group.totals.lateMinutes,
       jamMenit(group.totals.workedMinutes),
+      "",
     ]);
     summary.font = { bold: true };
 
     sheet.columns.forEach((column, index) => {
-      column.width = index === 0 ? 22 : index === 3 ? 18 : 16;
+      column.width = index === 0 ? 22 : index === 3 ? 18 : index === 6 ? 48 : 16;
     });
   }
 
