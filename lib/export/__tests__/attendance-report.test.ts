@@ -22,6 +22,8 @@ function baris(overrides: Partial<AttendanceReportRow> & { hostId: string; hostN
     status: "Tepat waktu",
     statusKey: "on_time",
     lateMinutes: 0,
+    shiftName: "Pagi",
+    shiftHours: "06.00 – 14.00",
     duration: "7 jam",
     workedMinutes: 420,
     note: "",
@@ -72,6 +74,8 @@ describe("groupAttendanceByHost", () => {
   });
 });
 
+const REKENING = { "h-1": "1234567890 (BCA)", "h-2": "" };
+
 async function namaSheet(rows: AttendanceReportRow[]) {
   const buffer = await buildAttendanceWorkbook(rows, meta);
   const workbook = new ExcelJS.Workbook();
@@ -114,14 +118,45 @@ describe("buildAttendanceWorkbook", () => {
     expect(nama).toContain("Ringkasan");
   });
 
-  it("membawa catatan absensi ke kolom terakhir", async () => {
-    const buffer = await buildAttendanceWorkbook(contoh, meta);
+  async function lembar(nama: string) {
+    const buffer = await buildAttendanceWorkbook(contoh, meta, REKENING);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(new Uint8Array(buffer).buffer as ArrayBuffer);
+    return workbook.getWorksheet(nama);
+  }
 
-    const sheet = workbook.getWorksheet("Ani Lestari");
-    expect(sheet?.getRow(4).getCell(7).value).toBe("Catatan");
-    expect(sheet?.getRow(5).getCell(7).value).toBe("Sakit, izin pulang setelah jam 12.");
+  it("membawa catatan absensi ke kolom terakhir", async () => {
+    const sheet = await lembar("Ani Lestari");
+    expect(sheet?.getRow(4).getCell(9).value).toBe("Catatan");
+    expect(sheet?.getRow(5).getCell(9).value).toBe("Sakit, izin pulang setelah jam 12.");
+  });
+
+  it("menuliskan nama shift beserta jamnya", async () => {
+    const sheet = await lembar("Ani Lestari");
+
+    expect(sheet?.getRow(4).getCell(2).value).toBe("Shift");
+    expect(sheet?.getRow(4).getCell(3).value).toBe("Jam shift");
+    expect(sheet?.getRow(5).getCell(2).value).toBe("Pagi");
+    expect(sheet?.getRow(5).getCell(3).value).toBe("06.00 – 14.00");
+  });
+
+  it("menaruh nomor rekening di kepala lembar tiap orang", async () => {
+    const sheet = await lembar("Ani Lestari");
+    expect(String(sheet?.getCell("A3").value)).toContain("Rek. 1234567890 (BCA)");
+  });
+
+  it("menyebut rekening yang belum diisi apa adanya", async () => {
+    const sheet = await lembar("Budi Santoso");
+    expect(String(sheet?.getCell("A3").value)).toContain("Rek. belum diisi");
+  });
+
+  it("memberi kolom nomor rekening di lembar ringkasan", async () => {
+    const sheet = await lembar("Ringkasan");
+
+    expect(sheet?.getRow(4).getCell(2).value).toBe("Nomor rekening");
+    // Ani Lestari lebih dulu menurut abjad.
+    expect(sheet?.getRow(5).getCell(2).value).toBe("1234567890 (BCA)");
+    expect(sheet?.getRow(6).getCell(2).value).toBe("");
   });
 
   it("tetap menghasilkan berkas yang sah saat periodenya kosong", async () => {
@@ -161,10 +196,20 @@ describe("buildAttendancePdf", () => {
   }
 
   it("mencetak catatan absensi di halaman orangnya", async () => {
-    const isi = teks(await buildAttendancePdf(contoh, meta));
+    const isi = teks(await buildAttendancePdf(contoh, meta, REKENING));
 
     expect(isi).toContain("Catatan");
     expect(isi).toContain("Sakit, izin pulang setelah jam 12.");
+  });
+
+  it("mencetak nama shift, jamnya, dan nomor rekening", async () => {
+    const isi = teks(await buildAttendancePdf(contoh, meta, REKENING));
+
+    expect(isi).toContain("Jam shift");
+    expect(isi).toContain("06.00");
+    expect(isi).toContain("14.00");
+    expect(isi).toContain("Nomor rekening: 1234567890 (BCA)");
+    expect(isi).toContain("Nomor rekening: belum diisi");
   });
 
   it("tidak menyisipkan halaman ringkasan bila hanya satu host", async () => {

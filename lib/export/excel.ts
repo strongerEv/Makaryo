@@ -102,9 +102,13 @@ function styleHeader(row: ExcelJS.Row) {
  * ke orang yang bersangkutan berarti ikut membagikan catatan rekan-rekannya.
  * Sekarang tiap orang punya lembarnya sendiri, bernama sesuai namanya.
  */
-export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta: ReportMeta) {
+export async function buildAttendanceWorkbook(
+  rows: AttendanceReportRow[],
+  meta: ReportMeta,
+  bankAccounts: Record<string, string> = {},
+) {
   const workbook = createWorkbook();
-  const groups = groupAttendanceByHost(rows);
+  const groups = groupAttendanceByHost(rows, bankAccounts);
   const dipakai = new Set<string>();
 
   // Buku kerja tanpa satu lembar pun ditolak Excel, jadi periode kosong tetap
@@ -127,13 +131,18 @@ export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta:
     const sheet = addSheet(workbook, meta, {
       name: sheetName(group.hostName, dipakai),
       heading: group.hostName,
-      subtitle: `${meta.title} · Dibuat: ${meta.generatedAt}`,
-      columns: 7,
+      // Nomor rekening ditaruh di kepala lembar, bukan diulang tiap baris:
+      // nilainya satu per orang, dan yang merekap payroll cukup melihatnya
+      // sekali di lembar orang itu.
+      subtitle: `${meta.title} · Rek. ${group.bankAccount || "belum diisi"} · Dibuat: ${meta.generatedAt}`,
+      columns: 9,
     });
 
     // Kolom "Host" sengaja dibuang: namanya sudah jadi judul lembarnya.
     const header = sheet.addRow([
       "Tanggal",
+      "Shift",
+      "Jam shift",
       "Clock in",
       "Clock out",
       "Status",
@@ -146,6 +155,8 @@ export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta:
     group.rows.forEach((row) => {
       const added = sheet.addRow([
         row.date,
+        row.shiftName,
+        row.shiftHours,
         row.clockIn,
         row.clockOut,
         row.status,
@@ -154,11 +165,13 @@ export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta:
         row.note,
       ]);
       // Catatan bisa beberapa kalimat; dibungkus supaya tidak melebar ke samping.
-      added.getCell(7).alignment = { wrapText: true, vertical: "top" };
+      added.getCell(9).alignment = { wrapText: true, vertical: "top" };
     });
 
     const summary = sheet.addRow([
       `Total ${group.totals.records} catatan`,
+      "",
+      "",
       "",
       "",
       `${group.totals.late} kali telat`,
@@ -169,7 +182,7 @@ export async function buildAttendanceWorkbook(rows: AttendanceReportRow[], meta:
     summary.font = { bold: true };
 
     sheet.columns.forEach((column, index) => {
-      column.width = index === 0 ? 22 : index === 3 ? 18 : index === 6 ? 48 : 16;
+      column.width = index === 0 ? 22 : index === 5 ? 18 : index === 8 ? 48 : 16;
     });
   }
 
@@ -187,11 +200,12 @@ function addSummarySheet(
     name: sheetName("Ringkasan", dipakai),
     heading: `${meta.title} — Makaryo`,
     subtitle: `Host: ${meta.hostLabel} · Dibuat: ${meta.generatedAt}`,
-    columns: 7,
+    columns: 8,
   });
 
   const header = sheet.addRow([
     "Host",
+    "Nomor rekening",
     "Jumlah catatan",
     "Tepat waktu",
     "Telat",
@@ -202,8 +216,9 @@ function addSummarySheet(
   styleHeader(header);
 
   groups.forEach((group) => {
-    sheet.addRow([
+    const added = sheet.addRow([
       group.hostName,
+      group.bankAccount,
       group.totals.records,
       group.totals.onTime,
       group.totals.late,
@@ -211,11 +226,15 @@ function addSummarySheet(
       group.totals.lateMinutes,
       jamMenit(group.totals.workedMinutes),
     ]);
+    // Nomor rekening diperlakukan sebagai teks: disimpan sebagai angka, nol di
+    // depannya hilang dan yang panjang berubah jadi notasi ilmiah.
+    added.getCell(2).alignment = { horizontal: "left" };
   });
 
   const semua: AttendanceTotals = sumAttendance(groups.flatMap((group) => group.rows));
   const summary = sheet.addRow([
     `Total ${groups.length} host`,
+    "",
     semua.records,
     semua.onTime,
     semua.late,
@@ -226,7 +245,7 @@ function addSummarySheet(
   summary.font = { bold: true };
 
   sheet.columns.forEach((column, index) => {
-    column.width = index === 0 ? 28 : index === 6 ? 20 : 16;
+    column.width = index === 0 ? 28 : index === 1 ? 24 : index === 7 ? 20 : 16;
   });
 }
 

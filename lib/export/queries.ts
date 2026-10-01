@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { formatDuration } from "@/lib/attendance/status";
 import { ATTENDANCE_STATUS_LABEL, type AttendanceStatus } from "@/lib/types/database";
-import { formatDate, formatTime } from "@/lib/utils/datetime";
+import { formatClock, formatDate, formatTime } from "@/lib/utils/datetime";
 import { monthLabel, monthRange } from "@/lib/utils/period";
 
 export type ReportFilter = {
@@ -16,6 +16,10 @@ export type AttendanceReportRow = {
   hostId: string;
   date: string;
   hostName: string;
+  /** Nama shift terjadwal, atau "—" bila absensinya tanpa jadwal. */
+  shiftName: string;
+  /** Jam shift menurut jadwal, mis. "06.00 – 14.00". */
+  shiftHours: string;
   clockIn: string;
   clockOut: string;
   /** Label siap tampil, mis. "Tepat waktu". */
@@ -40,6 +44,8 @@ export type AttendanceTotals = {
 export type HostAttendanceGroup = {
   hostId: string;
   hostName: string;
+  /** Nomor rekening untuk keperluan payroll; kosong bila belum diisi. */
+  bankAccount: string;
   rows: AttendanceReportRow[];
   totals: AttendanceTotals;
 };
@@ -65,7 +71,11 @@ export function sumAttendance(rows: AttendanceReportRow[]): AttendanceTotals {
  * Dikelompokkan lewat id, bukan nama: dua host bisa bernama sama, dan menggabung
  * catatan mereka jadi satu tabel lebih buruk daripada dua tabel berjudul sama.
  */
-export function groupAttendanceByHost(rows: AttendanceReportRow[]): HostAttendanceGroup[] {
+export function groupAttendanceByHost(
+  rows: AttendanceReportRow[],
+  /** Nomor rekening per host; dipisah dari baris karena nilainya satu per orang. */
+  bankAccounts: Record<string, string> = {},
+): HostAttendanceGroup[] {
   const kelompok = new Map<string, AttendanceReportRow[]>();
 
   for (const row of rows) {
@@ -78,6 +88,7 @@ export function groupAttendanceByHost(rows: AttendanceReportRow[]): HostAttendan
     .map(([hostId, daftar]) => ({
       hostId,
       hostName: daftar[0].hostName,
+      bankAccount: bankAccounts[hostId] ?? "",
       rows: daftar,
       totals: sumAttendance(daftar),
     }))
@@ -110,7 +121,11 @@ export async function fetchAttendanceReport(supabase: SupabaseClient, filter: Re
 
   let query = supabase
     .from("attendances")
-    .select("*, profiles!attendances_host_id_fkey(full_name)")
+    // Shift diambil lewat penugasannya: absensi tanpa jadwal memang tidak punya
+    // shift, dan itu justru keterangan yang perlu terbaca saat merekap.
+    .select(
+      "*, profiles!attendances_host_id_fkey(full_name, bank_account), schedule_assignments(shifts(name, start_time, end_time))",
+    )
     .gte("work_date", start)
     .lte("work_date", end)
     .order("work_date", { ascending: true });
@@ -119,12 +134,27 @@ export async function fetchAttendanceReport(supabase: SupabaseClient, filter: Re
 
   const { data } = await query;
 
+  const bankAccounts: Record<string, string> = {};
+
   const rows: AttendanceReportRow[] = (data ?? []).map((row) => {
-    const profile = row.profiles as unknown as { full_name: string } | null;
+    const profile = row.profiles as unknown as {
+      full_name: string;
+      bank_account: string | null;
+    } | null;
+
+    const assignment = row.schedule_assignments as unknown as {
+      shifts: { name: string; start_time: string; end_time: string } | null;
+    } | null;
+    const shift = assignment?.shifts ?? null;
+
+    bankAccounts[row.host_id as string] = profile?.bank_account ?? "";
+
     return {
       hostId: row.host_id as string,
       date: formatDate(row.work_date as string),
       hostName: profile?.full_name ?? "Host",
+      shiftName: shift?.name ?? "Tanpa jadwal",
+      shiftHours: shift ? `${formatClock(shift.start_time)} – ${formatClock(shift.end_time)}` : "—",
       clockIn: row.clock_in_at ? formatTime(row.clock_in_at as string) : "—",
       clockOut: row.clock_out_at ? formatTime(row.clock_out_at as string) : "—",
       status: ATTENDANCE_STATUS_LABEL[row.status as AttendanceStatus],
@@ -143,7 +173,7 @@ export async function fetchAttendanceReport(supabase: SupabaseClient, filter: Re
     generatedAt: formatDate(new Date()),
   };
 
-  return { rows, meta };
+  return { rows, meta, bankAccounts };
 }
 
 export async function fetchRevenueReport(supabase: SupabaseClient, filter: ReportFilter) {
