@@ -13,6 +13,10 @@ import {
   type EditorShift,
   type EditorTarget,
 } from "@/components/schedule/assignment-editor-sheet";
+import {
+  DayPreviewSheet,
+  type DayPreviewEntry,
+} from "@/components/schedule/day-preview-sheet";
 import { MonthCalendar, type CalendarItem } from "@/components/schedule/month-calendar";
 import { LeaveDaySheet } from "@/components/schedule/leave-day-editor";
 import {
@@ -240,15 +244,37 @@ export function EditableWeekBoard({
 export function EditableMonthCalendar({
   month,
   items,
+  leaves = [],
   ...shared
 }: SharedProps & {
   month: string;
   items: Record<string, CalendarItem[]>;
+  leaves?: WeekLeave[];
 }) {
   const { target, bukaEdit, tutup, editorShifts } = useAssignmentEditor(shared);
+  const [tanggalPratinjau, setTanggalPratinjau] = useState<string | null>(null);
 
   const idsTerlihat = useMemo(() => shared.assignments.map((row) => row.id), [shared.assignments]);
   const tandai = useMarking(idsTerlihat);
+
+  const shiftById = useMemo(() => new Map(shared.shifts.map((shift) => [shift.id, shift])), [shared.shifts]);
+
+  const entriPratinjau: DayPreviewEntry[] = tanggalPratinjau
+    ? shared.assignments
+        .filter((row) => row.workDate === tanggalPratinjau)
+        .map((row) => {
+          const shift = shiftById.get(row.shiftId);
+          return {
+            id: row.id,
+            hostName: row.hostName,
+            shiftName: shift?.name ?? "Shift",
+            shiftStart: shift?.start_time ?? null,
+            shiftEnd: shift?.end_time ?? null,
+            tone: shift?.color ?? "primary",
+            status: row.status,
+          };
+        })
+    : [];
 
   return (
     <>
@@ -261,6 +287,7 @@ export function EditableMonthCalendar({
         selectedDate={shared.selectedDate}
         emptyLabel="Kosong"
         onSelectItem={bukaEdit}
+        onSelectDate={setTanggalPratinjau}
         markedIds={tandai.menandai ? tandai.terpilih : undefined}
         onToggleMark={tandai.menandai ? tandai.toggle : undefined}
         onToggleDay={(date) =>
@@ -268,6 +295,22 @@ export function EditableMonthCalendar({
             shared.assignments.filter((row) => row.workDate === date).map((row) => row.id),
           )
         }
+      />
+
+      <DayPreviewSheet
+        date={tanggalPratinjau}
+        open={tanggalPratinjau !== null}
+        onClose={() => setTanggalPratinjau(null)}
+        entries={entriPratinjau}
+        leaves={leaves
+          .filter((row) => row.date === tanggalPratinjau)
+          .map((row) => ({ id: row.id, hostName: row.hostName, type: row.type }))}
+        onEdit={(entryId) => {
+          // Editornya menggantikan pratinjau, bukan menumpuk di atasnya.
+          setTanggalPratinjau(null);
+          bukaEdit(entryId);
+        }}
+        manageHref={tanggalPratinjau ? shared.hrefByDate[tanggalPratinjau] : undefined}
       />
 
       {target ? (

@@ -8,7 +8,10 @@ import { todayInJakarta } from "@/lib/utils/datetime";
 
 export type CalendarItem = {
   id: string;
+  /** Teks di dalam petak; sengaja pendek karena ruangnya cuma beberapa huruf. */
   label: string;
+  /** Keterangan lengkap untuk tooltip dan pembaca layar. */
+  title?: string;
   tone?: string;
   muted?: boolean;
 };
@@ -32,6 +35,7 @@ export function MonthCalendar({
   markedIds,
   onToggleMark,
   onToggleDay,
+  onSelectDate,
 }: {
   month: string;
   items: Record<string, CalendarItem[]>;
@@ -47,6 +51,11 @@ export function MonthCalendar({
   onToggleMark?: (itemId: string) => void;
   /** Mode tandai: menandai seluruh entri satu hari sekaligus. */
   onToggleDay?: (date: string) => void;
+  /**
+   * Mengklik petak membuka pratinjau hari itu alih-alih berpindah halaman.
+   * Tanpa ini perilakunya kembali seperti semula: menautkan ke `hrefByDate`.
+   */
+  onSelectDate?: (date: string) => void;
 }) {
   const menandai = Boolean(onToggleMark);
   const tertandai = new Set(markedIds ?? []);
@@ -95,12 +104,20 @@ export function MonthCalendar({
               className={cn(
                 "relative flex min-h-[74px] w-full flex-col gap-1 rounded-[14px] border p-1.5 text-left transition-colors sm:min-h-[92px] sm:p-2",
                 isSelected ? "border-primary bg-primary-soft" : "border-line bg-surface",
-                href && "hover:border-primary/40",
+                (href || onSelectDate) && "hover:border-primary/40",
               )}
             >
-              {/* Seluruh sel tetap bisa diklik untuk memilih hari; entri jadwal
-                  berada di lapisan atasnya agar kliknya membuka editor. */}
-              {href && !menandai ? (
+              {/* Seluruh sel tetap bisa diklik; entri jadwal berada di lapisan
+                  atasnya agar kliknya membuka editor. Saat mode tandai aktif,
+                  lapisan ini dimatikan supaya centangnya tidak terganggu. */}
+              {menandai ? null : onSelectDate ? (
+                <button
+                  type="button"
+                  onClick={() => onSelectDate(date)}
+                  className="absolute inset-0 rounded-[14px]"
+                  aria-label={`Lihat jadwal ${date}`}
+                />
+              ) : href ? (
                 <Link href={href} className="absolute inset-0 rounded-[14px]" aria-label={`Pilih ${date}`} />
               ) : null}
 
@@ -128,6 +145,12 @@ export function MonthCalendar({
                       item.muted && "opacity-60",
                     );
 
+                    // Saat petaknya membuka pratinjau, entri di dalamnya dibuat
+                    // tidak bisa diklik sendiri. Hari yang penuh membuat chip
+                    // menutupi hampir seluruh petak, sehingga tidak tersisa ruang
+                    // untuk mengetuk tanggalnya — padahal justru hari seperti itu
+                    // yang paling ingin dilihat isinya. Penyuntingan satu entri
+                    // tetap tersedia, dari dalam pratinjaunya.
                     if (menandai) {
                       const dipilih = tertandai.has(item.id);
                       return (
@@ -140,7 +163,7 @@ export function MonthCalendar({
                             "pointer-events-auto transition-shadow",
                             dipilih ? "opacity-100 ring-2 ring-primary" : "opacity-70 hover:ring-2 hover:ring-primary/40",
                           )}
-                          title={`${dipilih ? "Batal tandai" : "Tandai"} ${item.label}`}
+                          title={`${dipilih ? "Batal tandai" : "Tandai"} ${item.title ?? item.label}`}
                         >
                           {dipilih ? "\u2713 " : ""}
                           {item.label}
@@ -148,18 +171,18 @@ export function MonthCalendar({
                       );
                     }
 
-                    return onSelectItem ? (
+                    return onSelectItem && !onSelectDate ? (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => onSelectItem(item.id)}
                         className={cn(gaya, "pointer-events-auto transition-shadow hover:ring-2 hover:ring-primary/40")}
-                        title={`Ubah ${item.label}`}
+                        title={`Ubah ${item.title ?? item.label}`}
                       >
                         {item.label}
                       </button>
                     ) : (
-                      <span key={item.id} className={gaya}>
+                      <span key={item.id} className={gaya} title={item.title ?? item.label}>
                         {item.label}
                       </span>
                     );

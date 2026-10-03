@@ -3,7 +3,9 @@ import Link from "next/link";
 import { CalendarDays, CalendarX2 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
-import { MonthCalendar, type CalendarItem } from "@/components/schedule/month-calendar";
+import type { DayPreviewEntry } from "@/components/schedule/day-preview-sheet";
+import { type CalendarItem } from "@/components/schedule/month-calendar";
+import { MonthView } from "./month-view";
 import { MonthNav } from "@/components/schedule/month-nav";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -57,11 +59,24 @@ export default async function HostSchedulePage({
   const assignments = (data ?? []) as unknown as AssignmentRow[];
 
   const byDate: Record<string, CalendarItem[]> = {};
+  // Isi pratinjau disiapkan di server supaya pembungkus kliennya tidak perlu
+  // menyimpan seluruh baris penugasan hanya untuk mencari ulang shift-nya.
+  const entriesByDate: Record<string, DayPreviewEntry[]> = {};
+
   assignments.forEach((row) => {
     const list = byDate[row.work_date] ?? (byDate[row.work_date] = []);
     list.push({
       id: row.id,
       label: row.shifts?.name ?? "Shift",
+      tone: row.shifts?.color ?? "primary",
+    });
+
+    const entri = entriesByDate[row.work_date] ?? (entriesByDate[row.work_date] = []);
+    entri.push({
+      id: row.id,
+      shiftName: row.shifts?.name ?? "Shift",
+      shiftStart: row.shifts?.start_time ?? null,
+      shiftEnd: row.shifts?.end_time ?? null,
       tone: row.shifts?.color ?? "primary",
     });
   });
@@ -99,9 +114,10 @@ export default async function HostSchedulePage({
 
       {mode === "bulan" ? (
         <Card>
-          <MonthCalendar month={month} items={byDate} />
+          <MonthView month={month} items={byDate} entriesByDate={entriesByDate} />
           <p className="mt-4 text-[12px] text-ink-muted">
-            Tanggal tanpa shift berarti kamu libur. Jadwal dapat berubah bila admin mem-publish revisi.
+            Ketuk tanggal untuk melihat jam shiftnya. Tanggal tanpa shift berarti kamu libur, dan jadwal
+            dapat berubah bila admin mem-publish revisi.
           </p>
         </Card>
       ) : null}

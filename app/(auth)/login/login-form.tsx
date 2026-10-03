@@ -5,7 +5,8 @@ import { useActionState } from "react";
 
 import { signInAction, type AuthState } from "@/app/(auth)/actions";
 import { Alert } from "@/components/ui/alert";
-import { Field, Input } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
+import { SecretInput } from "@/components/ui/secret-input";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 const INITIAL: AuthState = {};
@@ -19,10 +20,11 @@ export function LoginForm({ linkError }: { linkError?: string }) {
       {error ? <Alert tone="error">{error}</Alert> : null}
 
       <Field label="Email" htmlFor="email" required>
-        <Input
+        <SecretInput
           id="email"
           name="email"
-          type="email"
+          label="email"
+          visibleType="email"
           autoComplete="email"
           inputMode="email"
           placeholder="nama@email.com"
@@ -31,10 +33,10 @@ export function LoginForm({ linkError }: { linkError?: string }) {
       </Field>
 
       <Field label="Kata sandi" htmlFor="password" required>
-        <Input
+        <SecretInput
           id="password"
           name="password"
-          type="password"
+          label="kata sandi"
           autoComplete="current-password"
           placeholder="••••••••"
           required

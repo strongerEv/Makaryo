@@ -18,7 +18,8 @@ import { requireAdmin } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { LeaveType, Profile, SchedulePeriod, Shift } from "@/lib/types/database";
 import { cn } from "@/lib/utils/cn";
-import { formatDate, todayInJakarta } from "@/lib/utils/datetime";
+import { formatDate, formatClock, todayInJakarta } from "@/lib/utils/datetime";
+import { initials } from "@/lib/utils/initials";
 import { addDays, currentMonth, eachDate, monthRange, shiftMonth, weekStart } from "@/lib/utils/period";
 import { LiveSync } from "@/lib/realtime/live-sync";
 import { DayEditor } from "./day-editor";
@@ -38,6 +39,15 @@ type AssignmentRow = {
   source: "auto" | "manual";
   profiles: Pick<Profile, "id" | "full_name"> | null;
   shifts: Pick<Shift, "id" | "name" | "start_time" | "end_time" | "color"> | null;
+};
+
+/** Titik warna legenda; cocok dengan latar chip di dalam petak kalender. */
+const SHIFT_DOT: Record<string, string> = {
+  primary: "bg-primary",
+  coral: "bg-coral",
+  amber: "bg-amber",
+  emerald: "bg-emerald",
+  sky: "bg-sky",
 };
 
 const TAMPILAN: { value: Tampilan; label: string }[] = [
@@ -141,9 +151,15 @@ export default async function AdminSchedulePage({
   const items: Record<string, CalendarItem[]> = {};
   assignments.forEach((row) => {
     const list = items[row.work_date] ?? (items[row.work_date] = []);
+    const nama = row.profiles?.full_name ?? "Host";
+    const shift = row.shifts?.name ?? "Shift";
+
     list.push({
       id: row.id,
-      label: `${row.shifts?.name ?? "Shift"} · ${row.profiles?.full_name?.split(" ")[0] ?? "?"}`,
+      // Petak sempit hanya memuat beberapa huruf; shift-nya sudah terbaca dari
+      // warnanya, jadi yang perlu tampil di sini cukup siapa orangnya.
+      label: initials(nama),
+      title: `${nama} · ${shift}`,
       tone: row.shifts?.color ?? "primary",
       muted: row.status === "draft",
     });
@@ -302,10 +318,33 @@ export default async function AdminSchedulePage({
               assignments={boardAssignments}
               shifts={shifts}
               hosts={editorHosts}
+              leaves={leaves}
               hrefByDate={hrefByDate}
               selectedDate={selectedDate}
             />
-            <p className="mt-4 text-[12px] text-ink-muted">
+
+            {/* Petaknya kini hanya memuat inisial, jadi arti warnanya perlu
+                disebutkan — tanpa ini kode warnanya cuma bisa ditebak. */}
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              {shifts.map((shift) => (
+                <span key={shift.id} className="inline-flex items-center gap-1.5 text-[12px] text-ink-muted">
+                  <span
+                    className={cn(
+                      "inline-block size-2.5 rounded-full",
+                      SHIFT_DOT[shift.color ?? "primary"] ?? SHIFT_DOT.primary,
+                    )}
+                    aria-hidden
+                  />
+                  {shift.name}
+                  <span className="tabular text-ink-muted/70">
+                    {formatClock(shift.start_time)}–{formatClock(shift.end_time)}
+                  </span>
+                </span>
+              ))}
+            </div>
+
+            <p className="mt-3 text-[12px] text-ink-muted">
+              Ketuk tanggal untuk melihat isinya, atau ketuk inisial untuk langsung mengubah penugasan.
               Kartu pudar berarti masih draft dan belum terlihat host.
             </p>
           </Card>
