@@ -169,6 +169,10 @@ dan dashboard menampilkan data nyata.
 
 Seluruh sesi sudah selesai. Pekerjaan lanjutan yang masuk akal berikutnya:
 
+- **Simulasi Jadwal (Beta)** ✅ — ruang coba-coba admin untuk penjadwalan multi lini bisnis
+  (Tumbler & Celana, 3 tetap + 2 freelance). Lihat `07-simulasi-jadwal-beta.md`. Langkah
+  berikutnya setelah hitungannya fix: terapkan ke jadwal asli (`99-open-questions.md` #14).
+
 - Integrasi payroll (nomor rekening dan total jam kerja sudah tersedia di data).
 - Kebijakan penyimpanan foto absensi bila kuota Storage mulai menipis.
 - Notifikasi ringkasan harian untuk admin.

@@ -12,6 +12,7 @@ Sebelum menulis kode apa pun di sesi mana pun, baca berurutan:
 2. `docs/02-database.md` — skema tabel, relasi, dan aturan RLS
 3. `docs/03-design-system.md` — token warna, komponen, dan aturan responsif
 4. `docs/04-roadmap-sesi.md` — sesi ini mengerjakan bagian yang mana, dan definisi selesainya
+5. `docs/07-simulasi-jadwal-beta.md` — bila menyentuh menu Simulasi Jadwal (Beta) atau multi lini bisnis
 
 Jangan mengulang diskusi requirement. Semua keputusan sudah dikunci di dokumen di atas.
 Kalau menemukan hal yang benar-benar belum diputuskan, catat di

@@ -17,7 +17,7 @@ export function SidebarNav({ items, onNavigate }: { items: NavItem[]; onNavigate
 
   return (
     <nav className="flex flex-col gap-1" aria-label="Navigasi utama">
-      {items.map(({ href, label, icon }) => {
+      {items.map(({ href, label, icon, badge }) => {
         const Icon = NAV_ICONS[icon];
         const active = isActivePath(pathname, href);
         return (
@@ -33,6 +33,16 @@ export function SidebarNav({ items, onNavigate }: { items: NavItem[]; onNavigate
           >
             <Icon className="size-[18px] shrink-0" aria-hidden />
             <span className="truncate">{label}</span>
+            {badge ? (
+              <span
+                className={cn(
+                  "ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                  active ? "bg-white/20 text-white" : "bg-amber-soft text-[#9a6a12]",
+                )}
+              >
+                {badge}
+              </span>
+            ) : null}
           </Link>
         );
       })}

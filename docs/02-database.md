@@ -220,6 +220,17 @@ Unik: `(assignment_id, offset_minutes)`.
 | before, after | jsonb | nilai sebelum & sesudah |
 | created_at | timestamptz | |
 
+### schedule_sandboxes
+Dokumen **Simulasi Jadwal (Beta)** — satu baris (`id = 1`), hanya admin. Tidak berelasi
+dengan tabel jadwal asli; lihat `07-simulasi-jadwal-beta.md`.
+
+| Kolom | Tipe | Catatan |
+|---|---|---|
+| id | smallint PK | selalu 1 |
+| data | jsonb | lini, shift tiruan, peserta, penugasan, izin, aturan — divalidasi skema zod di `lib/scheduling/sandbox.ts` |
+| updated_by | uuid FK profiles | admin terakhir yang menyimpan |
+| updated_at | timestamptz | |
+
 ## Row Level Security
 
 RLS aktif di semua tabel. Pola dasarnya:
@@ -237,7 +248,7 @@ RLS aktif di semua tabel. Pola dasarnya:
   - `leave_requests` — baca & insert miliknya sendiri; kolom `status`/`reviewed_*` hanya admin.
   - `revenue_reports` — baca miliknya sendiri, insert untuk dirinya sendiri.
   - `shifts`, `app_settings` — baca saja.
-  - `audit_logs` — tidak ada akses sama sekali.
+  - `audit_logs`, `schedule_sandboxes` — tidak ada akses sama sekali.
   - `push_subscriptions`, `notifications` — hanya miliknya sendiri.
 
 Bucket Storage `attendance` dan `revenue` bersifat privat; berkas diakses lewat signed URL.

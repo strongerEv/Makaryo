@@ -20,7 +20,8 @@ export type NavIconName =
   | "swap"
   | "history"
   | "diagnostics"
-  | "demo";
+  | "demo"
+  | "sandbox";
 
 export type NavItem = {
   href: string;
@@ -28,6 +29,8 @@ export type NavItem = {
   icon: NavIconName;
   /** Ditampilkan di bottom nav mobile. */
   primary?: boolean;
+  /** Label kecil di samping nama menu, mis. "Beta". */
+  badge?: string;
 };
 
 export const HOST_NAV: NavItem[] = [
@@ -44,6 +47,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/admin/pengguna", label: "Kelola Pengguna", icon: "users" },
   { href: "/admin/jadwal", label: "Jadwal", icon: "calendar" },
+  { href: "/admin/simulasi-jadwal", label: "Simulasi Jadwal", icon: "sandbox", badge: "Beta" },
   { href: "/admin/approval", label: "Approval", icon: "inbox" },
   { href: "/admin/absensi", label: "Absensi", icon: "attendance" },
   { href: "/admin/omzet", label: "Omzet", icon: "wallet" },

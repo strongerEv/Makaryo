@@ -6,6 +6,7 @@ import {
   CalendarDays,
   ClipboardList,
   FileBarChart,
+  FlaskConical,
   History,
   Home,
   Inbox,
@@ -38,4 +39,5 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   history: History,
   diagnostics: Activity,
   demo: Sparkles,
+  sandbox: FlaskConical,
 };

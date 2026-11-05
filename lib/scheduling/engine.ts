@@ -6,6 +6,12 @@ export type SchedulingHost = {
   id: string;
   /** Jatah libur per minggu; sisanya adalah jumlah hari kerja maksimum. */
   weeklyDayOffQuota: number;
+  /**
+   * Prioritas pengisian, angka kecil didahulukan. Opsional: tanpa nilai ini
+   * semua host setara. Dipakai simulasi Beta agar host tetap mengisi slot
+   * lebih dulu dan freelance hanya menutup kekurangannya.
+   */
+  priority?: number;
 };
 
 export type SchedulingShift = {
@@ -15,6 +21,11 @@ export type SchedulingShift = {
   endTime: string;
   minHosts: number;
   sortOrder: number;
+  /**
+   * Kelompok shift, mis. lini bisnis. Opsional: bila diisi, rotasi juga
+   * meratakan berapa kali tiap host kebagian kelompok yang sama.
+   */
+  group?: string;
 };
 
 export type SchedulingLeave = {
@@ -47,6 +58,11 @@ export type SchedulingInput = {
   existingAssignments?: SchedulingAssignment[];
   /** Jumlah shift yang sudah dijalani tiap host sebelum periode ini, untuk pemerataan. */
   previousWorkload?: Record<string, number>;
+  /**
+   * Batas shift per host per hari, termasuk shift yang tidak bertumpuk.
+   * Kosong atau 0 berarti tanpa batas — perilaku lama jadwal asli.
+   */
+  maxShiftsPerDay?: number;
 };
 
 export type SchedulingResult = {
@@ -75,11 +91,14 @@ type Interval = { start: number; end: number };
  * - host yang sedang izin/libur disetujui tidak dijadwalkan
  * - satu host tidak pernah bertugas di dua shift yang waktunya bertumpuk
  * - jatah libur mingguan tiap host dihormati
+ * - batas shift per hari (`maxShiftsPerDay`), bila diisi
  *
  * Batasan lunak (diusahakan, dilaporkan bila gagal):
  * - jumlah host minimum tiap shift terpenuhi
  * - beban shift dibagi merata antar host
  * - hindari tutup malam lalu buka pagi (jeda < 10 jam)
+ * - host berprioritas lebih tinggi (`priority` kecil) didahulukan, bila diisi
+ * - giliran antar kelompok shift (`group`) dibuat merata, bila diisi
  */
 export function generateSchedule(input: SchedulingInput): SchedulingResult {
   const dates = eachDate(input.startDate, input.endDate);
@@ -107,6 +126,11 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
   // pagi terus pagi, siang terus siang.
   const shiftCounts: Record<string, Record<string, number>> = {};
   const lastShiftDay: Record<string, Record<string, number>> = {};
+  // Hitungan per kelompok (lini bisnis) dan per hari, hanya terpakai bila
+  // shift punya `group` atau ada batas shift harian.
+  const groupCounts: Record<string, Record<string, number>> = {};
+  const dailyCounts: Record<string, Record<string, number>> = {};
+  const maxPerDay = input.maxShiftsPerDay && input.maxShiftsPerDay > 0 ? input.maxShiftsPerDay : Infinity;
 
   // Dihitung, bukan dicari di daftar tanggal: penugasan pembanding boleh berada
   // di luar rentang generate — minggu sebelumnya saat hanya satu minggu yang
@@ -120,7 +144,15 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
     intervals[host.id] = [];
     shiftCounts[host.id] = {};
     lastShiftDay[host.id] = {};
+    groupCounts[host.id] = {};
+    dailyCounts[host.id] = {};
   });
+
+  const catat = (hostId: string, shift: SchedulingShift, workDate: string) => {
+    catatRotasi(shiftCounts, lastShiftDay, hostId, shift.id, indeksHari(workDate));
+    dailyCounts[hostId][workDate] = (dailyCounts[hostId][workDate] ?? 0) + 1;
+    if (shift.group) groupCounts[hostId][shift.group] = (groupCounts[hostId][shift.group] ?? 0) + 1;
+  };
 
   const result: SchedulingAssignment[] = [];
   const warnings: SchedulingWarning[] = [];
@@ -136,7 +168,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
     totalLoad[assignment.hostId] += 1;
     weeklyDays[assignment.hostId].add(`${weekStart(assignment.workDate)}|${assignment.workDate}`);
     intervals[assignment.hostId].push(toInterval(assignment.workDate, shift));
-    catatRotasi(shiftCounts, lastShiftDay, assignment.hostId, assignment.shiftId, indeksHari(assignment.workDate));
+    catat(assignment.hostId, shift, assignment.workDate);
 
     const key = `${assignment.workDate}|${assignment.shiftId}`;
     takenSlots.set(key, (takenSlots.get(key) ?? 0) + 1);
@@ -159,7 +191,8 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
 
       const candidates = hosts
         .filter((host) =>
-          isEligible(host, { workDate, week, shift, leaveKeys, restKeys: restPlan.keys, weeklyDays, intervals }),
+          isEligible(host, { workDate, week, shift, leaveKeys, restKeys: restPlan.keys, weeklyDays, intervals }) &&
+          (dailyCounts[host.id][workDate] ?? 0) < maxPerDay,
         )
         .sort((a, b) =>
           compareCandidates(a, b, {
@@ -171,6 +204,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
             intervals,
             shiftCounts,
             lastShiftDay,
+            groupCounts,
           }),
         );
 
@@ -181,7 +215,7 @@ export function generateSchedule(input: SchedulingInput): SchedulingResult {
         totalLoad[host.id] += 1;
         weeklyDays[host.id].add(`${week}|${workDate}`);
         intervals[host.id].push(toInterval(workDate, shift));
-        catatRotasi(shiftCounts, lastShiftDay, host.id, shift.id, indeksHari(workDate));
+        catat(host.id, shift, workDate);
       });
 
       const assigned = alreadyTaken + picked.length;
@@ -270,9 +304,14 @@ function compareCandidates(
     intervals: Record<string, Interval[]>;
     shiftCounts: Record<string, Record<string, number>>;
     lastShiftDay: Record<string, Record<string, number>>;
+    groupCounts: Record<string, Record<string, number>>;
   },
 ) {
-  const { totalLoad, weeklyDays, week, workDate, shift, intervals, shiftCounts, lastShiftDay } = context;
+  const { totalLoad, weeklyDays, week, workDate, shift, intervals, shiftCounts, lastShiftDay, groupCounts } = context;
+
+  // Prioritas hanya berlaku bila diisi; tanpa itu kedua sisi bernilai 0.
+  const priorityDiff = (a.priority ?? 0) - (b.priority ?? 0);
+  if (priorityDiff !== 0) return priorityDiff;
 
   const loadDiff = totalLoad[a.id] - totalLoad[b.id];
   if (loadDiff !== 0) return loadDiff;
@@ -283,6 +322,14 @@ function compareCandidates(
   const rotasiDiff =
     (shiftCounts[a.id]?.[shift.id] ?? 0) - (shiftCounts[b.id]?.[shift.id] ?? 0);
   if (rotasiDiff !== 0) return rotasiDiff;
+
+  // Rotasi antar kelompok: yang paling jarang memegang lini ini didahulukan,
+  // supaya tidak ada yang terus-terusan di lini yang sama.
+  if (shift.group) {
+    const groupDiff =
+      (groupCounts[a.id]?.[shift.group] ?? 0) - (groupCounts[b.id]?.[shift.group] ?? 0);
+    if (groupDiff !== 0) return groupDiff;
+  }
 
   // Bila sama-sama jarang, yang paling lama tidak memegangnya yang maju.
   const terakhirDiff = bandingkanTerakhir(
